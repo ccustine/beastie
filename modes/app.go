@@ -18,8 +18,9 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"github.com/SierraSoftworks/multicast"
 	. "github.com/ccustine/beastie/beastie"
-	"github.com/gosuri/uilive"
+	"github.com/ccustine/uilive"
 	"github.com/rcrowley/go-metrics"
 	"github.com/sirupsen/logrus"
 	"math"
@@ -28,21 +29,21 @@ import (
 	"time"
 )
 
-var magicTimestampMLAT = []byte{0xFF, 0x00, 0x4D, 0x4C, 0x41, 0x54}
+var (
+	magicTimestampMLAT = []byte{0xFF, 0x00, 0x4D, 0x4C, 0x41, 0x54}
+	uiWriter           *uilive.Writer
+	info               BeastInfo
+	knownAircraft      = NewAircraftMap()
+	aircraft           = make(chan aircraftData)
+	GoodRate           = metrics.GetOrRegisterMeter("Message Rate (Good)", metrics.DefaultRegistry)
+	BadRate            = metrics.GetOrRegisterMeter("Message Rate (Bad)", metrics.DefaultRegistry)
+	ModeACCnt          = metrics.GetOrRegisterCounter("Message Rate (ModeA/C)", metrics.DefaultRegistry)
+	ModesShortCnt      = metrics.GetOrRegisterCounter("Message Rate (ModeS Short)", metrics.DefaultRegistry)
+	ModesLongCnt       = metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
+)
 
 const (
 	aisChars = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&'()*+,-./0123456789:;<=>?"
-)
-
-var (
-	info          	BeastInfo
-	knownAircraft 	= NewAircraftMap()
-	aircraft      	= make(chan aircraftData)
-	GoodRate      	= metrics.GetOrRegisterMeter("Message Rate (Good)", metrics.DefaultRegistry)
-	BadRate       	= metrics.GetOrRegisterMeter("Message Rate (Bad)", metrics.DefaultRegistry)
-	ModeACCnt    	= metrics.GetOrRegisterCounter("Message Rate (ModeA/C)", metrics.DefaultRegistry)
-	ModesShortCnt	= metrics.GetOrRegisterCounter("Message Rate (ModeS Short)", metrics.DefaultRegistry)
-	ModesLongCnt 	= metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
 )
 
 type TCPClient struct {
@@ -71,6 +72,7 @@ func Stop() {
 
 func Start(beastInfo BeastInfo) {
 	info = beastInfo
+	output := multicast.New()
 
 	sources := make(map[string]*TCPClient)
 	if beastInfo.Debug {
@@ -89,18 +91,30 @@ func Start(beastInfo BeastInfo) {
 		}
 	}
 
-	writer := uilive.New()
-	writer.Start()
+	uiWriter = uilive.New()
+	uiWriter.RefreshInterval = 1000 * time.Millisecond
+	uiWriter.Start()
+
+	go func() {
+		l := output.Listen()
+		for acm := range l.C {
+			newac := acm.(*AircraftMap)
+			updateDisplay(newac, uiWriter)
+		}
+	}()
 
 	go func() {
 		ticker := time.NewTicker(1000 * time.Millisecond)
 		for {
 			select {
 			case <-ticker.C:
-				updateDisplay(knownAircraft, writer)
+				output.C <- knownAircraft
+
+				//updateDisplay(knownAircraft, uiWriter)
+
+				//_ = uiWriter.Flush()
 			}
 		}
-		writer.Stop()
 	}()
 
 	for {
@@ -198,7 +212,7 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 		if info.Debug {
 			fmt.Printf("%d byte frame\n", len(msgContent))
 		}
-		for i:= 0; i < len(msgContent); i++ {
+		for i := 0; i < len(msgContent); i++ {
 			if info.Debug {
 				fmt.Printf("%02x", msgContent[i])
 			}
@@ -208,9 +222,9 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 		}
 
 		if msgType == 0x31 {
-			ac <- decodeModeAC(msgContent, isMlat, 10 * math.Log10(math.Pow(float64(sigLevel)/255, 2)))
+			ac <- decodeModeAC(msgContent, isMlat, 10*math.Log10(math.Pow(float64(sigLevel)/255, 2)))
 		} else {
-			ac <- decodeModeS(msgContent, isMlat, 10 * math.Log10(math.Pow(float64(sigLevel)/255, 2)))
+			ac <- decodeModeS(msgContent, isMlat, 10*math.Log10(math.Pow(float64(sigLevel)/255, 2)))
 		}
 	}
 

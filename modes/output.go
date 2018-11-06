@@ -16,11 +16,13 @@ package modes
 
 import (
 	"fmt"
-	"github.com/InVisionApp/tabular"
+	"github.com/alexeyco/simpletable"
+	"github.com/aybabtme/rgbterm"
+	"github.com/ccustine/uilive"
 	"github.com/kellydunn/golang-geo"
-	. "github.com/logrusorgru/aurora"
+	//. "github.com/logrusorgru/aurora"
 	"github.com/sirupsen/logrus"
-	"io"
+	"image/color"
 	"math"
 	"sort"
 	"strings"
@@ -28,44 +30,38 @@ import (
 )
 
 var (
-	tab     tabular.Table
-	table	tabular.Output
+	displayTable *simpletable.Table
 )
 
 func init() {
-	tab = tabular.New()
-	tab.Col("row", "#", 3)
-	tab.Col("icao", "ICAO", 6)
-	tab.Col("call", "Callsign", 8)
-	tab.Col("latlon", "Lat/Lon", 17)
-	//tab.Col("mlat", "MLAT", 4)
-	tab.ColRJ("alt", "Altitude", 8)
-	tab.ColRJ("roc", "RoC", 8)
-	tab.ColRJ("spd", "Speed", 5)
-	tab.ColRJ("hdg", "Hdg", 3)
-	tab.ColRJ("dst", "Distance", 8)
-	tab.ColRJ("last", "Last Seen", 9)
-	tab.ColRJ("rssi", "RSSI", 7)
+	displayTable = simpletable.New()
 
-	table = tab.Parse("row", "icao", "call", "latlon",  /*"mlat",*/   "alt", "roc", "spd", "hdg", "dst", "last", "rssi")
-}
-
-func durationSecondsElapsed(since time.Duration) string {
-	sec := uint8(since.Seconds())
-	if sec == math.MaxUint8 {
-		return "-"
-	} else {
-		return fmt.Sprintf("%4d", sec)
+	displayTable.Header = &simpletable.Header{
+		Cells: []*simpletable.Cell{
+			{Align: simpletable.AlignCenter, Text: "#"},
+			{Align: simpletable.AlignCenter, Text: "ICAO"},
+			{Align: simpletable.AlignLeft, Text: "Call"},
+			{Align: simpletable.AlignCenter, Text: "Lat/Lon"},
+			{Align: simpletable.AlignRight, Text: "Altitude"},
+			{Align: simpletable.AlignRight, Text: "Climb Rate"},
+			{Align: simpletable.AlignRight, Text: "Speed"},
+			{Align: simpletable.AlignCenter, Text: "Hdg"},
+			{Align: simpletable.AlignRight, Text: "Dist"},
+			{Align: simpletable.AlignRight, Text: "Last"},
+			{Align: simpletable.AlignRight, Text: "RSSI"},
+		},
 	}
 }
 
-func updateDisplay(knownAircraft *AircraftMap, writer io.Writer) {
-	var b strings.Builder
+var colorPalette = map[string][]color.RGBA{
+	"orange": {{255, 175, 0, 255}, {215, 135, 0, 255}, {175, 95, 0, 255}},
+	"white": {{255, 255, 255, 255},{175, 175, 175, 255}, {95, 95, 95, 255}},
+	"red": {{255, 0, 0, 255},{175, 0,0,255},{95,0, 0,255}},
+}
 
-	b.WriteString(Bold(Cyan(table.Header)).String())
-	b.WriteString("\n")
-	b.WriteString(Bold(Cyan(table.SubHeader)).String())
-	b.WriteString("\n")
+func updateDisplay(knownAircraft *AircraftMap, writer *uilive.Writer) {
+	displayTable.Body.Cells = [][]*simpletable.Cell{}
+	var b strings.Builder
 
 	sortedAircraft := make(aircraftList, 0, knownAircraft.Len())
 
@@ -78,8 +74,8 @@ func updateDisplay(knownAircraft *AircraftMap, writer io.Writer) {
 	sort.Sort(sortedAircraft)
 
 	for i, aircraft := range sortedAircraft {
-		old := time.Since(aircraft.lastPos) > (time.Duration(10) * time.Second)
-		doomed := time.Since(aircraft.lastPos) > (time.Duration(20) * time.Second)
+		stale := time.Since(aircraft.lastPos) > (time.Duration(10) * time.Second)
+		pendingEvict := time.Since(aircraft.lastPos) > (time.Duration(35) * time.Second)
 		evict := time.Since(aircraft.lastPos) > (time.Duration(59) * time.Second)
 
 		if evict {
@@ -109,15 +105,6 @@ func updateDisplay(knownAircraft *AircraftMap, writer io.Writer) {
 				sLatLon = "---.------,---.------"
 			}
 			if aircraftHasAltitude {
-/*				var altUnit string
-				switch aircraft.altUnit {
-				case 0:
-					altUnit = "ft"
-				case 1:
-					altUnit = "m"
-				}
-*/
-
 				// TODO: This is noisy, need to figure out how to smooth and watch trending
 				var vrs string
 				switch aircraft.vertRateSign {
@@ -130,7 +117,6 @@ func updateDisplay(knownAircraft *AircraftMap, writer io.Writer) {
 				}
 
 				sAlt = fmt.Sprintf("%d %s", aircraft.altitude, vrs)
-				//sAlt = fmt.Sprintf("%d%s %s", aircraft.altitude, altUnit, vrs)
 			} else {
 				sAlt = "-----"
 			}
@@ -144,38 +130,51 @@ func updateDisplay(knownAircraft *AircraftMap, writer io.Writer) {
 			//tPing := time.Since(aircraft.lastPing)
 			tPos := time.Since(aircraft.lastPos)
 
-			if !old && !doomed {
-				b.WriteString(Cyan(
-					fmt.Sprintf(table.Format, i+1, fmt.Sprintf("%06x", aircraft.icaoAddr), aircraft.callsign,
-						sLatLon, /*isMlat,*/ sAlt, aircraft.vertRate, aircraft.speed, //fmt.Sprintf("%5.0f", aircraft.speed),
-						aircraft.heading, //fmt.Sprintf("%3.0f", aircraft.heading),
-						fmt.Sprintf("%3.1f", distance),
-						fmt.Sprintf("%2d", uint8(tPos.Seconds())), fmt.Sprintf("%.1f", aircraft.rssi))).String(),
-						)
-			} else if old && !doomed {
-				b.WriteString(Brown(
-					fmt.Sprintf(table.Format, i+1, fmt.Sprintf("%06x", aircraft.icaoAddr), aircraft.callsign,
-						sLatLon, /*isMlat, */ sAlt, aircraft.vertRate, aircraft.speed, //fmt.Sprintf("%5.0f", aircraft.speed),
-						aircraft.heading, //fmt.Sprintf("%3.0f", aircraft.heading),
-						fmt.Sprintf("%3.1f", distance),
-						fmt.Sprintf("%2d", uint8(tPos.Seconds())), fmt.Sprintf("%.1f", aircraft.rssi))).String())
-			} else if doomed {
-				b.WriteString(Red(
-					fmt.Sprintf(table.Format, i+1, fmt.Sprintf("%06x", aircraft.icaoAddr), aircraft.callsign,
-						sLatLon, /*isMlat,*/ sAlt, aircraft.vertRate, aircraft.speed, //fmt.Sprintf("%5.0f", aircraft.speed),
-						aircraft.heading, //fmt.Sprintf("%3.0f", aircraft.heading),
-						fmt.Sprintf("%3.1f", distance),
-						fmt.Sprintf("%2d", uint8(tPos.Seconds())), fmt.Sprintf("%.1f", aircraft.rssi))).String())
+			theme := colorPalette["red"]
+			var rowcolor color.Color
+
+			if !stale && !pendingEvict {
+				rowcolor = theme[0]
+			} else if stale && !pendingEvict {
+				rowcolor = theme[1]
+			} else if pendingEvict {
+				rowcolor = theme[2]
 			}
+
+			r := []*simpletable.Cell{
+				{Align: simpletable.AlignRight, Text: colorize(fmt.Sprintf("%d", i+1), rowcolor)},
+				{Text: colorize(fmt.Sprintf("%06x", aircraft.icaoAddr), rowcolor)},
+				{Text: colorize(aircraft.callsign, rowcolor)},
+				{Text: colorize(sLatLon, rowcolor)},
+				{Text: colorize(sAlt, rowcolor)},
+				{Text: colorize(fmt.Sprintf("%d", aircraft.vertRate), rowcolor)},
+				{Text: colorize(fmt.Sprintf("%d", aircraft.speed), rowcolor)},
+				{Text: colorize(fmt.Sprintf("%d", aircraft.heading), rowcolor)},
+				{Text: colorize(fmt.Sprintf("%3.1f", distance), rowcolor)},
+				{Text: colorize(fmt.Sprintf("%2d", uint8(tPos.Seconds())), rowcolor)},
+				{Text: colorize(fmt.Sprintf("%.1f", aircraft.rssi), rowcolor)},
+			}
+
+			displayTable.Body.Cells = append(displayTable.Body.Cells, r)
 
 		}
 	}
 
-	b.WriteString(fmt.Sprintf("Message Rate (Good) 1 Min: %.1f/s\n", GoodRate.Rate1()))
-	b.WriteString(fmt.Sprintf("Message Rate (Bad)  1 Min: %.1f/s\n", BadRate.Rate1()))
-	b.WriteString(fmt.Sprintf("Message Count - ModeA/C: %d\n", ModeACCnt.Count()))
-	b.WriteString(fmt.Sprintf("Message Count - ModeS Short: %d\n", ModesShortCnt.Count()))
-	b.WriteString(fmt.Sprintf("Message Count - ModeS Long: %d\n", ModesLongCnt.Count()))
+	displayTable.Footer = &simpletable.Footer{
+		Cells: []*simpletable.Cell{
+			{Align: simpletable.AlignLeft, Span: 4, Text: fmt.Sprintf("Message Rate (Good): %.1f/s\nMessage Rate (Bad) : %.1f/s", GoodRate.Rate1(), BadRate.Rate1())},
+			{Align: simpletable.AlignLeft, Span: 2, Text: fmt.Sprintf("")},
+			{Align: simpletable.AlignLeft, Span: 5, Text: fmt.Sprintf("Message Count - Mode A/C:    %d\nMessage Count - ModeS Short: %d\nMessage Count - ModeS Long:  %d", ModeACCnt.Count(), ModesShortCnt.Count(), ModesLongCnt.Count())},
+		},
+	}
 
+	displayTable.SetStyle(simpletable.StyleCompact)
+	b.WriteString(displayTable.String())
+	b.WriteString("\n")
 	writer.Write([]byte(b.String()))
+}
+
+func colorize(text string, newColor color.Color) string {
+	r, g, b, _ :=newColor.RGBA()
+	return rgbterm.FgString(text, uint8(r), uint8(g), uint8(b))
 }

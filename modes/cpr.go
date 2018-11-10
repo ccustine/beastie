@@ -18,8 +18,6 @@ import (
 	"math"
 )
 
-//http://www.lll.lu/~edward/edward/adsb/DecodingADSBposition.html
-
 func cprnl(lat float64) byte {
 	if lat < 0 { lat = -lat }
 	switch {

@@ -59,15 +59,10 @@ func (c *TCPClient) start(ac chan aircraftData) {
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
-		panic(err)
+		logrus.Error(err)
 	}
-	defer conn.Close()
 
-	handleConnection(conn, ac)
-}
-
-func Stop() {
-
+	go handleConnection(conn, ac)
 }
 
 func Start(beastInfo BeastInfo) {
@@ -80,14 +75,13 @@ func Start(beastInfo BeastInfo) {
 	}
 
 	for _, source := range beastInfo.Sources {
-		// TODO: This map and key is super fucking ugly, pls fixme
 		sourceKey := fmt.Sprintf("%s:%d", source.Host, source.Port)
 		if source.Host != "" && source.Port != 0 {
 			sources[sourceKey] = &TCPClient{
 				Host: source.Host,
 				Port: source.Port,
 			}
-			go sources[sourceKey].start(aircraft)
+			sources[sourceKey].start(aircraft)
 		}
 	}
 
@@ -97,9 +91,9 @@ func Start(beastInfo BeastInfo) {
 
 	go func() {
 		l := output.Listen()
-		for acm := range l.C {
-			newac := acm.(*AircraftMap)
-			updateDisplay(newac, uiWriter)
+		for {
+			acm :=  <- l.C
+			updateDisplay(acm.(*AircraftMap), uiWriter)
 		}
 	}()
 
@@ -109,10 +103,6 @@ func Start(beastInfo BeastInfo) {
 			select {
 			case <-ticker.C:
 				output.C <- knownAircraft
-
-				//updateDisplay(knownAircraft, uiWriter)
-
-				//_ = uiWriter.Flush()
 			}
 		}
 	}()
@@ -127,9 +117,12 @@ func Start(beastInfo BeastInfo) {
 }
 
 func handleConnection(conn net.Conn, ac chan aircraftData) {
+	//reader := bufio.NewReaderSize(conn, 128)
 	reader := bufio.NewReader(conn)
 	scanner := bufio.NewScanner(reader)
 	scanner.Split(ScanModeS)
+
+	defer conn.Close()
 
 	for scanner.Scan() {
 		currentMessage := scanner.Bytes()
@@ -158,16 +151,16 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 
 		// http://wiki.modesbeast.com/Mode-S_Beast:Data_Output_Formats
 		switch msgType {
-		case 0x31: // 1
+		case 0x31: // 1 - Mode A/C
 			ModeACCnt.Inc(1)
 			msgLen = 10
 			if (info.Debug) {
 				logrus.Debugf("Invalid Beast mode msg type 1: %x", message)
 			}
-		case 0x32: // 2
+		case 0x32: // 2 - Mode S Short
 			ModesShortCnt.Inc(1)
 			msgLen = 15
-		case 0x33: // 3
+		case 0x33: // 3 - Mode S Long
 			ModesLongCnt.Inc(1)
 			msgLen = 22
 		case 0x34: // 4

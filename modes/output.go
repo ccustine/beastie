@@ -20,8 +20,8 @@ import (
 	"github.com/aybabtme/rgbterm"
 	"github.com/ccustine/uilive"
 	"github.com/kellydunn/golang-geo"
-	//. "github.com/logrusorgru/aurora"
-	"github.com/sirupsen/logrus"
+	//. "github.com/logorgru/aurora"
+	log "github.com/sirupsen/logrus"
 	"image/color"
 	"math"
 	"sort"
@@ -41,14 +41,15 @@ func init() {
 			{Align: simpletable.AlignCenter, Text: "#"},
 			{Align: simpletable.AlignCenter, Text: "ICAO"},
 			{Align: simpletable.AlignLeft, Text: "Call"},
+			{Align: simpletable.AlignLeft, Text: "Squawk"},
 			{Align: simpletable.AlignCenter, Text: "Lat/Lon"},
-			{Align: simpletable.AlignRight, Text: "Altitude"},
-			{Align: simpletable.AlignRight, Text: "Climb Rate"},
+			{Align: simpletable.AlignRight, Text: "Alt"},
+			{Align: simpletable.AlignRight, Text: "Rate"},
 			{Align: simpletable.AlignRight, Text: "Speed"},
 			{Align: simpletable.AlignCenter, Text: "Hdg"},
 			{Align: simpletable.AlignRight, Text: "Dist"},
 			{Align: simpletable.AlignRight, Text: "Last"},
-			{Align: simpletable.AlignRight, Text: "RSSI"},
+			//{Align: simpletable.AlignRight, Text: "RSSI"},
 		},
 	}
 }
@@ -57,6 +58,7 @@ var colorPalette = map[string][]color.RGBA{
 	"orange": {{255, 175, 0, 255}, {215, 135, 0, 255}, {175, 95, 0, 255}},
 	"white": {{255, 255, 255, 255},{175, 175, 175, 255}, {95, 95, 95, 255}},
 	"red": {{255, 0, 0, 255},{175, 0,0,255},{95,0, 0,255}},
+	"rainbow": {{255, 255, 255, 255},{255, 170, 30, 255},{255, 100,100,255}},
 }
 
 func updateDisplay(knownAircraft *AircraftMap, writer *uilive.Writer) {
@@ -80,7 +82,7 @@ func updateDisplay(knownAircraft *AircraftMap, writer *uilive.Writer) {
 
 		if evict {
 			if info.Debug {
-				logrus.Debugf("Evicting %d", aircraft.icaoAddr)
+				log.Debugf("Evicting %d", aircraft.icaoAddr)
 			}
 			knownAircraft.Delete(aircraft.icaoAddr)
 			continue
@@ -107,12 +109,16 @@ func updateDisplay(knownAircraft *AircraftMap, writer *uilive.Writer) {
 			if aircraftHasAltitude {
 				// TODO: This is noisy, need to figure out how to smooth and watch trending
 				var vrs string
-				switch aircraft.vertRateSign {
-				case 0:
-					vrs = "➚"
-				case 1:
-					vrs = "➘"
-				default:
+				if aircraft.vertRate >= 250 {
+					switch aircraft.vertRateSign {
+					case 0:
+						vrs = "➚"
+					case 1:
+						vrs = "➘"
+					default:
+						vrs = ""
+					}
+				} else {
 					vrs = ""
 				}
 
@@ -130,7 +136,7 @@ func updateDisplay(knownAircraft *AircraftMap, writer *uilive.Writer) {
 			//tPing := time.Since(aircraft.lastPing)
 			tPos := time.Since(aircraft.lastPos)
 
-			theme := colorPalette["red"]
+			theme := colorPalette["rainbow"]
 			var rowcolor color.Color
 
 			if !stale && !pendingEvict {
@@ -141,18 +147,34 @@ func updateDisplay(knownAircraft *AircraftMap, writer *uilive.Writer) {
 				rowcolor = theme[2]
 			}
 
+			var vertRate string
+			if aircraft.vertRate >= 250 {
+				vertRate = fmt.Sprintf("%d", aircraft.vertRate)
+			} else {
+				vertRate = ""
+			}
+
+			var squawk string
+			if aircraft.squawk > 0 {
+				squawk = fmt.Sprintf("%04x", aircraft.squawk)
+			} else {
+				squawk = ""
+			}
+
 			r := []*simpletable.Cell{
 				{Align: simpletable.AlignRight, Text: colorize(fmt.Sprintf("%d", i+1), rowcolor)},
 				{Text: colorize(fmt.Sprintf("%06x", aircraft.icaoAddr), rowcolor)},
 				{Text: colorize(aircraft.callsign, rowcolor)},
+				//{Text: colorize(fmt.Sprintf("%x", i), rowcolor)},
+				{Text: colorize(squawk, rowcolor)},
 				{Text: colorize(sLatLon, rowcolor)},
 				{Text: colorize(sAlt, rowcolor)},
-				{Text: colorize(fmt.Sprintf("%d", aircraft.vertRate), rowcolor)},
+				{Text: colorize(vertRate, rowcolor)},
 				{Text: colorize(fmt.Sprintf("%d", aircraft.speed), rowcolor)},
 				{Text: colorize(fmt.Sprintf("%d", aircraft.heading), rowcolor)},
 				{Text: colorize(fmt.Sprintf("%3.1f", distance), rowcolor)},
 				{Text: colorize(fmt.Sprintf("%2d", uint8(tPos.Seconds())), rowcolor)},
-				{Text: colorize(fmt.Sprintf("%.1f", aircraft.rssi), rowcolor)},
+				//{Text: colorize(fmt.Sprintf("%.1f", aircraft.rssi), rowcolor)},
 			}
 
 			displayTable.Body.Cells = append(displayTable.Body.Cells, r)

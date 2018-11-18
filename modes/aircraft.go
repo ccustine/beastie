@@ -26,6 +26,7 @@ type aircraftData struct {
 	icaoAddr uint32
 
 	callsign string
+	squawk   uint32
 
 	eRawLat uint32
 	eRawLon uint32
@@ -35,12 +36,12 @@ type aircraftData struct {
 	latitude  float64
 	longitude float64
 	altitude  int32
-	altUnit  uint
+	altUnit   uint
 
-	ewd            uint  // 0 = East, 1 = West.
-	ewv            int32 // E/W velocity.
-	nsd            uint  // 0 = North, 1 = South.
-	nsv            int32 // N/S velocity.
+	//ewd            uint  // 0 = East, 1 = West.
+	//ewv            int32 // E/W velocity.
+	//nsd            uint  // 0 = North, 1 = South.
+	//nsv            int32 // N/S velocity.
 	vertRateSource uint  // Vertical rate source.
 	vertRateSign   uint  // Vertical rate sign.
 	vertRate       int32 // Vertical rate.

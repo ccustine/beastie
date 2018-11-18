@@ -22,7 +22,7 @@ import (
 	. "github.com/ccustine/beastie/beastie"
 	"github.com/ccustine/uilive"
 	"github.com/rcrowley/go-metrics"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"math"
 	"net"
 	"reflect"
@@ -34,7 +34,7 @@ var (
 	uiWriter           *uilive.Writer
 	info               BeastInfo
 	knownAircraft      = NewAircraftMap()
-	aircraft           = make(chan aircraftData)
+	aircraft           = make(chan aircraftData) //, 10)
 	GoodRate           = metrics.GetOrRegisterMeter("Message Rate (Good)", metrics.DefaultRegistry)
 	BadRate            = metrics.GetOrRegisterMeter("Message Rate (Bad)", metrics.DefaultRegistry)
 	ModeACCnt          = metrics.GetOrRegisterCounter("Message Rate (ModeA/C)", metrics.DefaultRegistry)
@@ -59,7 +59,7 @@ func (c *TCPClient) start(ac chan aircraftData) {
 
 	conn, err := net.DialTCP("tcp", nil, tcpAddr)
 	if err != nil {
-		logrus.Error(err)
+		log.Error(err)
 	}
 
 	go handleConnection(conn, ac)
@@ -71,7 +71,7 @@ func Start(beastInfo BeastInfo) {
 
 	sources := make(map[string]*TCPClient)
 	if beastInfo.Debug {
-		logrus.Debugf("Beast Info: %v", beastInfo)
+		log.Debugf("Beast Info: %v", beastInfo)
 	}
 
 	for _, source := range beastInfo.Sources {
@@ -139,14 +139,12 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 		}
 		if !validMessage {
 			if info.Debug {
-				logrus.Debugf("Not a valid Message with 0x31 32 33 34 Msg: %#x\n", currentMessage)
+				log.Debugf("Not a valid Message with 0x31 32 33 34 Msg: %#x\n", currentMessage)
 			}
 			continue
 		}
 
-		message := currentMessage
-
-		msgType := message[0]
+		msgType := currentMessage[0]
 		var msgLen int
 
 		// http://wiki.modesbeast.com/Mode-S_Beast:Data_Output_Formats
@@ -154,8 +152,8 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 		case 0x31: // 1 - Mode A/C
 			ModeACCnt.Inc(1)
 			msgLen = 10
-			if (info.Debug) {
-				logrus.Debugf("Invalid Beast mode msg type 1: %x", message)
+			if info.Debug {
+				log.Debugf("Invalid Beast mode msg type 1: %x", currentMessage)
 			}
 		case 0x32: // 2 - Mode S Short
 			ModesShortCnt.Inc(1)
@@ -165,7 +163,7 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 			msgLen = 22
 		case 0x34: // 4
 			if (info.Debug) {
-				logrus.Debugf("Invalid Beast mode msg type 4: %x", message)
+				log.Debugf("Invalid Beast mode msg type 4: %x", currentMessage)
 			}
 			continue // not supported
 		default:
@@ -173,21 +171,21 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 			//msgLen = 8 // shortest possible msg w/header & timetstamp
 		}
 
-		if len(message) == msgLen {
-			logrus.Debugf("Message (Exact) len %d expected %d : %x", len(message), msgLen, message)
+		if len(currentMessage) == msgLen {
+			//log.Debugf("Message (Exact) len %d expected %d : %x", len(currentMessage), msgLen, currentMessage)
 			// Mark the rate because now we are going to actually parse the message
 			GoodRate.Mark(1)
-		} else if len(message) <= msgLen {
-			logrus.Debugf("Message (Less) len %d expected %d : %x", len(message), msgLen, message)
+		} else if len(currentMessage) <= msgLen {
+			//log.Debugf("Message (Less) len %d expected %d : %x", len(currentMessage), msgLen, currentMessage)
 			BadRate.Mark(1)
 			continue
-		} else if len(message) > msgLen {
-			logrus.Debugf("Message (More) len %d expected %d : %x", len(message), msgLen, message)
+		} else if len(currentMessage) > msgLen {
+			//log.Debugf("Message (More) len %d expected %d : %x", len(currentMessage), msgLen, currentMessage)
 			BadRate.Mark(1)
 			continue
 		}
 
-		isMlat := reflect.DeepEqual(message[1:7], magicTimestampMLAT)
+		isMlat := reflect.DeepEqual(currentMessage[1:7], magicTimestampMLAT)
 		if isMlat {
 			//fmt.Println("FROM MLAT")
 			//timestamp := parseTime(message[1:7])
@@ -199,31 +197,26 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 			//fmt.Println(timestamp)
 		}
 
-		sigLevel := message[7]
-
-		msgContent := message[8:]
-		if info.Debug {
-			fmt.Printf("%d byte frame\n", len(msgContent))
-		}
-		for i := 0; i < len(msgContent); i++ {
+/*		for i := 0; i < len(currentMessage[8:]); i++ {
 			if info.Debug {
-				fmt.Printf("%02x", msgContent[i])
+				log.Debugf("%02x", currentMessage[8:][i])
 			}
 		}
-		if info.Debug {
-			fmt.Printf("\n")
+*/
+/*		if info.Debug {
+			log.Debugf("\n")
 		}
-
+*/
 		if msgType == 0x31 {
-			ac <- decodeModeAC(msgContent, isMlat, 10*math.Log10(math.Pow(float64(sigLevel)/255, 2)))
+			ac <- decodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)))
 		} else {
-			ac <- decodeModeS(msgContent, isMlat, 10*math.Log10(math.Pow(float64(sigLevel)/255, 2)))
+			ac <- decodeModeS(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)))
 		}
 	}
 
 	if scanner.Err() != nil {
 		if info.Debug {
-			logrus.Debugf("Scanner Error: %s\n", scanner.Err())
+			log.Debugf("Scanner Error: %s\n", scanner.Err())
 		}
 	}
 

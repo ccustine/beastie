@@ -17,10 +17,8 @@ package modes
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/rcrowley/go-metrics"
-	"github.com/sirupsen/logrus"
-	"strconv"
+	log "github.com/sirupsen/logrus"
 	"strings"
 
 	//"fmt"
@@ -28,13 +26,50 @@ import (
 	"time"
 )
 
+const (
+	MODES_GENERATOR_POLY = uint32(0xfff409)
+)
+
+var (
+	crcTable [256]uint32
+)
+
+func init() {
+	var i uint32
+
+	for i = 0; i < 256; i += 1 {
+
+		var c = i << 16
+
+		var j uint
+		for j = 0; j < 8; j += 1 {
+			if (c & 0x800000) != 0 {
+				c = (c << 1) ^ MODES_GENERATOR_POLY
+			} else {
+				c = (c << 1)
+			}
+		}
+		crcTable[i] = c & 0x00ffffff
+	}
+}
+
 func decodeModeS(message []byte, isMlat bool, sig float64) aircraftData { //}, knownAircraft *AircraftMap) {
-	df := uint((message[0] & 0xF8) >> 3)
+	df := getbits(message, 1, 5) //uint((message[0] & 0xF8) >> 3)
+
+	var contextLogger *log.Entry
+	if info.Debug {
+		contextLogger = log.WithFields(log.Fields{
+			"message": fmt.Sprintf("%x", message),
+			"mlat":    isMlat,
+			"rssi":    sig,
+		})
+	}
 
 	var aircraft aircraftData
 	var aircraftExists bool
 	aircraft.vertRateSign = math.MaxUint32
 	icaoAddr := uint32(math.MaxUint32)
+	squawk := uint32(0)
 	//altCode := uint16(math.MaxUint16)
 	//altitude := int32(math.MaxInt32)
 
@@ -44,43 +79,56 @@ func decodeModeS(message []byte, isMlat bool, sig float64) aircraftData { //}, k
 
 	switch df {
 	case 0:
-	 msgType = "short air-air surveillance (TCAS)"
+		msgType = "short air-air surveillance (TCAS)"
 	case 4:
-	 msgType = "surveillance, altitude reply"
+		msgType = "surveillance, altitude reply"
 	case 5:
-	 msgType = "surveillance, Mode A identity reply"
+		msgType = "surveillance, Mode A identity reply"
 	case 11:
-	msgType = "All-Call reply containing aircraft address"
+		msgType = "All-Call reply containing aircraft address"
 	case 16:
-	 msgType = "long air-air surveillance (TCAS)"
+		msgType = "long air-air surveillance (TCAS)"
 	case 17:
-	 msgType = "extended squitter"
+		msgType = "extended squitter"
 	case 18:
-	 msgType = "TIS-B"
+		msgType = "TIS-B"
 	case 19:
-	 msgType = "military extended squitter"
+		msgType = "military extended squitter"
 	case 20:
-	 msgType = "Comm-B including altitude reply"
+		msgType = "Comm-B including altitude reply"
 	case 21:
-	 msgType = "Comm-B reply including Mode A identity"
+		msgType = "Comm-B reply including Mode A identity"
 	case 22:
-	 msgType = "military use"
+		msgType = "military use"
 	case 24:
-	 msgType = "special long msg"
+		msgType = "special long msg"
 	default:
-	 msgType = "unknown"
-	}
-	if info.Debug {
-		fmt.Printf("UF: %d\n", df)
-		fmt.Printf("UF: %08s\n", strconv.FormatInt(int64(df), 2))
-		fmt.Println(msgType)
+		msgType = "unknown"
 	}
 
 	//if df == 0 || df == 4 || df == 11 || df == 17 || df == 18 {
 	if df == 11 || df == 17 || df == 18 {
-		icaoAddr = uint32(message[1]) << 16 | uint32(message[2]) << 8 | uint32(message[3]) //New
+		icaoAddr = getbits(message, 9, 32) //uint32(message[1])<<16 | uint32(message[2])<<8 | uint32(message[3]) //New
+		/*		if info.Debug {
+					contextLogger.WithField("icao", fmt.Sprintf("ICAO: %06x\n", icaoAddr))
+					//log.Debugf("ICAO: %06x\n", icaoAddr)
+				}
+		*/
+	}
+
+	if df == 5 || df == 21 {
+		var bits uint
+		if df == 5 {
+			bits = 56
+		} else if df == 21 {
+			bits = 112
+		}
+		icaoAddr = modesChecksum(message, bits)
+
+		id := getbits(message, 20, 32)
+		squawk = uint32(decodeID13Field(uint(id)))
 		if info.Debug {
-			fmt.Printf("ICAO: %06x\n", icaoAddr)
+			log.Debugf("Ident Msg: %x Squawk code: %04x id %d, ICAO: %x", message, squawk, id, icaoAddr)
 		}
 	}
 
@@ -91,6 +139,7 @@ func decodeModeS(message []byte, isMlat bool, sig float64) aircraftData { //}, k
 			// initialize some values
 			aircraft = aircraftData{
 				icaoAddr:  icaoAddr,
+				squawk:    squawk,
 				oRawLat:   math.MaxUint32,
 				oRawLon:   math.MaxUint32,
 				eRawLat:   math.MaxUint32,
@@ -100,7 +149,7 @@ func decodeModeS(message []byte, isMlat bool, sig float64) aircraftData { //}, k
 				altitude:  math.MaxInt32,
 				callsign:  "",
 				mlat:      isMlat,
-				rssi: sig,
+				rssi:      sig,
 			}
 		} else {
 			aircraft = *ptrAircraft
@@ -108,29 +157,32 @@ func decodeModeS(message []byte, isMlat bool, sig float64) aircraftData { //}, k
 			if !aircraft.mlat {
 				aircraft.mlat = isMlat
 			}
+			if squawk != 0 {
+				aircraft.squawk = squawk
+			}
 		}
 		aircraft.lastPing = time.Now()
 	}
-	//fmt.Println(aircraft)
-	//fmt.Println(aircraftExists)
+	//log.Debugf(aircraft)
+	//log.Debugf(aircraftExists)
 
 	if df == 0 || df == 4 || df == 16 || df == 20 {
-		m_bit := message[3] & (1<<6)
-		q_bit := message[3] & (1<<4)
+		m_bit := message[3] & (1 << 6)
+		q_bit := message[3] & (1 << 4)
 
-		if info.Debug {
-			fmt.Printf("m_bit is %d, q_bit is %d\n", m_bit, q_bit)
-		}
-
+		/*		if info.Debug {
+					log.Debugf("m_bit is %d, q_bit is %d\n", m_bit, q_bit)
+				}
+		*/
 		aircraft.altUnit = 999
 		if m_bit == 0 {
 			aircraft.altUnit = 0 //Feet
 			if (q_bit != 0) {
 				/* N is the 11 bit integer resulting from the removal of bit Q and M */
-				n := ((message[2]&31)<<6) |
-					((message[3]&0x80)>>2) |
-					((message[3]&0x20)>>1) |
-					(message[3]&15);
+				n := ((message[2] & 31) << 6) |
+					((message[3] & 0x80) >> 2) |
+					((message[3] & 0x20) >> 1) |
+					(message[3] & 15);
 				/* The final altitude is due to the resulting number multiplied by 25, minus 1000. */
 				aircraft.altitude = (int32(n) * 25) - 1000;
 			} else {
@@ -141,53 +193,70 @@ func decodeModeS(message []byte, isMlat bool, sig float64) aircraftData { //}, k
 			/* TODO: Implement altitude when meter unit is selected. */
 		}
 
+		/*
+				altCode = (uint16(message[2])*256 + uint16(message[3])) & 0x1FFF
 
-/*
-		altCode = (uint16(message[2])*256 + uint16(message[3])) & 0x1FFF
+				if (altCode & 0x0040) > 0 {
+					// meters
+					// TODO
+					//log.Debugf("meters")
 
-		if (altCode & 0x0040) > 0 {
-			// meters
-			// TODO
-			//fmt.Println("meters")
+				} else if (altCode & 0x0010) > 0 {
+					// feet, raw integer
+					ac := (altCode&0x1F80)>>2 + (altCode&0x0020)>>1 + (altCode & 0x000F)
+					altitude = int32((ac * 25) - 1000)
+					// TODO
+					//log.Debugf("int altitude: ", altitude)
 
-		} else if (altCode & 0x0010) > 0 {
-			// feet, raw integer
-			ac := (altCode&0x1F80)>>2 + (altCode&0x0020)>>1 + (altCode & 0x000F)
-			altitude = int32((ac * 25) - 1000)
-			// TODO
-			//fmt.Println("int altitude: ", altitude)
+				} else if (altCode & 0x0010) == 0 {
+					// feet, Gillham coded
+					// TODO
+					//log.Debugf("gillham")
+				}
 
-		} else if (altCode & 0x0010) == 0 {
-			// feet, Gillham coded
-			// TODO
-			//fmt.Println("gillham")
-		}
-
-		if altitude != math.MaxInt32 {
-			aircraft.altitude = altitude
-		}
-*/
+				if altitude != math.MaxInt32 {
+					aircraft.altitude = altitude
+				}
+		*/
 
 	}
 
 	if df == 17 || df == 18 {
-		if info.Debug {
-			spew.Dump(message)
-		}
-		decodeExtendedSquitter(message, df, &aircraft)
+		//if info.Debug {
+		//	spew.Dump(message)
+		//}
+		decodeExtendedSquitter(message, uint(df), &aircraft)
 	}
 
-	//logrus.Info("Returning Aircraft")
+	//log.Info("Returning Aircraft")
 	if icaoAddr != math.MaxUint32 {
-		//knownAircraft.Store(icaoAddr, &aircraft)
+		if info.Debug {
+			contextLogger = log.WithFields(log.Fields{
+				"message": fmt.Sprintf("%x", message),
+				"mlat":    isMlat,
+				"rssi":    sig,
+				"icao":    icaoAddr,
+				"msgtype":	msgType,
+			})
+		}
+
+		if info.Debug {
+			contextLogger.Debugf("Returning Aircraft")
+		}
 		return aircraft
 	}
+	if info.Debug {
+		contextLogger.Debugf("Returning empty aircraft")
+	}
 	return aircraftData{}
-	//fmt.Println(aircraft)
+	//log.Debugf(aircraft)
 }
 
 func decodeModeAC(message []byte, isMlat bool, sig float64) aircraftData { //}, knownAircraft *AircraftMap) {
 	// TODO
+	if info.Debug {
+		log.Debug("NOOP on ModeAC decode")
+	}
 	return aircraftData{}
 }
 
@@ -227,17 +296,17 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 		if linkFmt == 18 {
 			switch message[0] & 7 {
 			case 1:
-				fmt.Println("Non-ICAO")
+				log.Debugf("Non-ICAO")
 			case 2:
-				fmt.Println("TIS-B fine")
+				log.Debugf("TIS-B fine")
 			case 3:
-				fmt.Println("TIS-B coarse")
+				log.Debugf("TIS-B coarse")
 			case 5:
-				fmt.Println("TIS-B anon ADS-B relay")
+				log.Debugf("TIS-B anon ADS-B relay")
 			case 6:
-				fmt.Println("ADS-B rebroadcast")
+				log.Debugf("ADS-B rebroadcast")
 			default:
-				fmt.Println("Non-ICAO unknown")
+				log.Debugf("Non-ICAO unknown")
 			}
 		}
 	}
@@ -250,7 +319,7 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 		msgSubType = uint(message[4]) & 7
 	}
 
-	//fmt.Printf("ext msg: %d\n", messageType)
+	//log.Debugf("ext msg: %d\n", messageType)
 
 	rawLatitude := uint32(math.MaxUint32)
 	rawLongitude := uint32(math.MaxUint32)
@@ -260,12 +329,13 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 
 	if len(message) < 10 {
 		//spew.Dump(aircraft)
-		logrus.Errorf(" Message length: %d\nMessage: %x\nMessage Type: %d\n Message Sub Type: %d", len(message), message, messageType, msgSubType)
+		log.Errorf(" Message length: %d\nMessage: %x\nMessage Type: %d\n Message Sub Type: %d", len(message), message, messageType, msgSubType)
 	}
 
-	if info.Debug {
-		logrus.Debugf("Type: %d, Subtype %d Message: %x", messageType, msgSubType, message)
-	}
+	/*	if info.Debug {
+			log.Debugf("Type: %d, Subtype %d Message: %x", messageType, msgSubType, message)
+		}
+	*/
 	switch messageType {
 	case 0:
 
@@ -273,31 +343,31 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 
 		callsign = parseCallsign(message)
 
-		if info.Debug {
-			logrus.Infof("Type %d (w/Callsign) %x", messageType, message)
-		}
-
+		/*		if info.Debug {
+					log.Infof("Type %d (w/Callsign) %x", messageType, message)
+				}
+		*/
 	case 19:
 		if msgSubType >= 1 && msgSubType <= 4 {
 			if msgSubType == 1 || msgSubType == 2 {
-				aircraft.ewd = uint((message[5] & 4) >> 2)
-				aircraft.ewv = int32(((message[5] & 3) << 8) | message[6])
-				aircraft.nsd = uint((message[7] & 0x80) >> 7)
-				aircraft.nsv = int32(((message[7] & 0x7f) << 3) | ((message[8] & 0xe0) >> 5))
+				ewd := int32((message[5] & 4) >> 2)
+				ewv := (int32(message[5]) & 3) << 8 | int32(message[6])
+				nsd := int32((message[7] & 0x80) >> 7)
+				nsv := (int32(message[7]) & 0x7f) << 3 | (int32(message[8]) & 0xe0) >> 5
 				aircraft.vertRateSource = uint((message[8] & 0x10) >> 4)
 				aircraft.vertRateSign = uint((message[8] & 0x8) >> 3)
-				aircraft.vertRate = int32(((message[8] & 7) << 6) | ((message[9] & 0xfc) >> 2))
+				aircraft.vertRate = int32(math.Round(float64(((int32((message[8]&7)<<6|(message[9]&0xfc)>>2)-1)*64)/25) * 25))
 
-				aircraft.speed = int32(math.Sqrt(float64(aircraft.nsv*aircraft.nsv + aircraft.ewv*aircraft.ewv)))
+				aircraft.speed = int32(math.Sqrt(float64(nsv*nsv + ewv*ewv)))
 
 				if aircraft.speed != 0 {
-					ewv := aircraft.ewv
-					nsv := aircraft.nsv
+					//ewv := aircraft.ewv
+					//nsv := aircraft.nsv
 
-					if aircraft.ewd != 0 {
+					if ewd != 0 {
 						ewv *= -1
 					}
-					if aircraft.nsd != 0 {
+					if nsd != 0 {
 						nsv *= -1
 					}
 
@@ -329,7 +399,7 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 				q_bit := message[6] & (1<<4)
 		*/
 		/*		if info.Debug {
-					fmt.Printf("m_bit is %d, q_bit is %d\n", m_bit, q_bit)
+					log.Debugf("m_bit is %d, q_bit is %d\n", m_bit, q_bit)
 				}
 		*/
 		ac12Data := (uint(message[5]) << 4) + (uint(message[6])>>4)&0x0FFF
@@ -341,8 +411,8 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 		}
 		if messageType != 20 && messageType != 21 && messageType != 22 {
 			//altitude :=
-			//fmt.Printf("ac12: %#04x\n", ac12Data)
-			//fmt.Printf("ac12: %d\n", decodeAC12Field(ac12Data))
+			//log.Debugf("ac12: %#04x\n", ac12Data)
+			//log.Debugf("ac12: %d\n", decodeAC12Field(ac12Data))
 
 			altitude = decodeAC12Field(ac12Data)
 
@@ -393,9 +463,53 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 		aircraft.longitude = longitude
 		aircraft.lastPos = time.Now()
 	}
-	if info.Debug {
-		spew.Dump(aircraft)
-	}
+	//if info.Debug {
+	//	spew.Dump(aircraft)
+	//}
+}
+
+func decodeID13Field(ID13Field uint) uint {
+	var hexGillham uint = 0
+
+	if ID13Field&0x1000 != 0 {
+		hexGillham |= 0x0010
+	} // Bit 12 = C1
+	if ID13Field&0x0800 != 0 {
+		hexGillham |= 0x1000
+	} // Bit 11 = A1
+	if ID13Field&0x0400 != 0 {
+		hexGillham |= 0x0020
+	} // Bit 10 = C2
+	if ID13Field&0x0200 != 0 {
+		hexGillham |= 0x2000
+	} // Bit  9 = A2
+	if ID13Field&0x0100 != 0 {
+		hexGillham |= 0x0040
+	} // Bit  8 = C4
+	if ID13Field&0x0080 != 0 {
+		hexGillham |= 0x4000
+	} // Bit  7 = A4
+	//if (ID13Field & 0x0040) {hexGillham |= 0x0800;} // Bit  6 = X  or M
+	if ID13Field&0x0020 != 0 {
+		hexGillham |= 0x0100
+	} // Bit  5 = B1
+	if ID13Field&0x0010 != 0 {
+		hexGillham |= 0x0001
+	} // Bit  4 = D1 or Q
+	if ID13Field&0x0008 != 0 {
+		hexGillham |= 0x0200
+	} // Bit  3 = B2
+	if ID13Field&0x0004 != 0 {
+		hexGillham |= 0x0002
+	} // Bit  2 = D2
+	if ID13Field&0x0002 != 0 {
+		hexGillham |= 0x0400
+	} // Bit  1 = B4
+	if ID13Field&0x0001 != 0 {
+		hexGillham |= 0x0004
+	} // Bit  0 = D4
+
+	return hexGillham
 }
 
 func parseCallsign(message []byte) string {
@@ -417,11 +531,11 @@ func parseRawLatLon(evenLat uint32, evenLon uint32, oddLat uint32,
 		return math.MaxFloat64, math.MaxFloat64
 	}
 
-	//fmt.Printf("Parsing: %d,%d + %d,%d\n", evenLat, evenLon, oddLat, oddLon)
+	//log.Debugf("Parsing: %d,%d + %d,%d\n", evenLat, evenLon, oddLat, oddLon)
 
 	// http://www.lll.lu/~edward/edward/adsb/DecodingADSBposition.html
 	j := int32((float64(59*evenLat-60*oddLat) / 131072.0) + 0.5)
-	//fmt.Println("J: ", j)
+	//log.Debugf("J: ", j)
 
 	const airdlat0 = float64(6.0)
 	const airdlat1 = float64(360.0) / float64(59.0)
@@ -435,8 +549,8 @@ func parseRawLatLon(evenLat uint32, evenLon uint32, oddLat uint32,
 		rlatOdd -= 360
 	}
 
-	//fmt.Println("rlat(0): ", rlatEven)
-	//fmt.Println("rlat(1): ", rlatOdd)
+	//log.Debugf("rlat(0): ", rlatEven)
+	//log.Debugf("rlat(1): ", rlatOdd)
 
 	nlEven := cprnl(rlatEven)
 	nlOdd := cprnl(rlatOdd)
@@ -445,8 +559,8 @@ func parseRawLatLon(evenLat uint32, evenLon uint32, oddLat uint32,
 		return math.MaxFloat64, math.MaxFloat64
 	}
 
-	//fmt.Println("NL(0): ", nlEven)
-	//fmt.Println("NL(1): ", nlOdd)
+	//log.Debugf("NL(0): ", nlEven)
+	//log.Debugf("NL(1): ", nlOdd)
 
 	var ni int16
 
@@ -458,22 +572,22 @@ func parseRawLatLon(evenLat uint32, evenLon uint32, oddLat uint32,
 	if ni < 1 {
 		ni = 1
 	}
-	//fmt.Println("NL(i): ", ni)
+	//log.Debugf("NL(i): ", ni)
 
 	//dlon := 360.0/float64(ni)
-	//fmt.Println("dlon(i):", dlon)
+	//log.Debugf("dlon(i):", dlon)
 
 	var m int16
 	var outLat float64
 	var outLon float64
 	if tFlag {
-		m = int16(math.Floor((float64(int32(evenLon*uint32(cprnl(rlatOdd)-1))-
+		m = int16(math.Floor((float64(int32(evenLon*uint32(cprnl(rlatOdd)-1)) -
 			int32(oddLon*uint32(cprnl(rlatOdd)))) / 131072.0) + 0.5))
 		outLon = cprDlonFunction(rlatOdd, tFlag, false) * (float64(m%ni) + float64(oddLon)/131072.0)
 		outLat = rlatOdd
 
 	} else {
-		m = int16(math.Floor((float64(int32(evenLon*uint32(cprnl(rlatEven)-1))-
+		m = int16(math.Floor((float64(int32(evenLon*uint32(cprnl(rlatEven)-1)) -
 			int32(oddLon*uint32(cprnl(rlatEven)))) / 131072.0) + 0.5))
 		outLon = cprDlonFunction(rlatEven, tFlag, false) * (float64(m%ni) + float64(evenLon)/131072.0)
 		outLat = rlatEven
@@ -481,9 +595,73 @@ func parseRawLatLon(evenLat uint32, evenLon uint32, oddLat uint32,
 
 	outLon -= math.Floor((outLon+180.0)/360.0) * 360.0
 
-	//fmt.Println("M: ", m)
-	//fmt.Println("outLat: ", outLat)
-	//fmt.Println("outLon: ", outLon)
+	//log.Debugf("M: ", m)
+	//log.Debugf("outLat: ", outLat)
+	//log.Debugf("outLon: ", outLon)
 
 	return outLat, outLon
+}
+
+func getbits(data []byte, firstbit uint16, lastbit uint16) uint32 {
+	fbi := firstbit - 1
+	lbi := lastbit - 1
+	//nbi := lastbit - firstbit + 1
+
+	fby := uint16(fbi >> 3)
+	lby := uint16(lbi >> 3)
+	nby := uint16((lby - fby) + 1)
+
+	shift := 7 - (lbi & 7)
+	topmask := uint(0xFF >> (fbi & 7))
+
+	//assert (fbi <= lbi);
+	//assert (nbi <= 32);
+	//assert (nby <= 5);
+
+	//log.Infof("nby is %d", nby)
+
+	if (nby == 5) {
+		return uint32((uint(data[fby])&topmask)<<(32-shift) |
+			uint(data[fby+1])<<(24-shift) |
+			uint(data[fby+2])<<(16-shift) |
+			uint(data[fby+3])<<(8-shift) |
+			uint(data[fby+4])>>shift)
+	} else if (nby == 4) {
+		return uint32((uint(data[fby])&topmask)<<(24-shift) |
+			uint(data[fby+1])<<(16-shift) |
+			uint(data[fby+2])<<(8-shift) |
+			uint(data[fby+3])>>shift)
+	} else if (nby == 3) {
+		return uint32((uint(data[fby])&topmask)<<(16-shift) |
+			uint(data[fby+1])<<(8-shift) |
+			uint(data[fby+2])>>shift)
+	} else if (nby == 2) {
+		return uint32((uint(data[fby])&topmask)<<(8-shift) |
+			uint(data[fby+1])>>shift)
+	} else if (nby == 1) {
+		return uint32(uint(data[fby])&topmask) >> shift
+	} else {
+		return 0
+	}
+}
+
+func modesChecksum(message []byte, bits uint) uint32 {
+	var rem uint32 = 0
+	var i uint
+
+	n := bits / 8
+
+	//assert(bits%8 == 0)
+	//assert(n >= 3)
+
+	for i = 0; i < n-3; i = i + 1 {
+		log.Debugf("Checksum message %x", message)
+		log.Debugf("Checksum index %d, n is %d", i, n)
+		log.Debugf("Checksum calc %d", uint32(message[i])^((rem&0xff0000)>>16))
+		rem = (rem << 8) ^ crcTable[uint32(message[i])^((rem&0xff0000)>>16)]
+		rem = rem & 0xffffff
+	}
+
+	rem = rem ^ (uint32(message[n-3]) << 16) ^ (uint32(message[n-2]) << 8) ^ (uint32(message[n-1]))
+	return rem
 }

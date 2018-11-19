@@ -46,7 +46,7 @@ type aircraftData struct {
 	vertRateSign   uint  // Vertical rate sign.
 	vertRate       int32 // Vertical rate.
 	speed          int32
-	heading        int16
+	heading        int32
 	headingIsValid bool
 
 	lastPing time.Time

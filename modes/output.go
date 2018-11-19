@@ -76,9 +76,7 @@ func updateDisplay(knownAircraft *AircraftMap, writer *uilive.Writer) {
 	sort.Sort(sortedAircraft)
 
 	for i, aircraft := range sortedAircraft {
-		stale := time.Since(aircraft.lastPos) > (time.Duration(10) * time.Second)
-		pendingEvict := time.Since(aircraft.lastPos) > (time.Duration(35) * time.Second)
-		evict := time.Since(aircraft.lastPos) > (time.Duration(59) * time.Second)
+		evict := time.Since(aircraft.lastPing) > (time.Duration(59) * time.Second)
 
 		if evict {
 			if info.Debug {
@@ -133,18 +131,32 @@ func updateDisplay(knownAircraft *AircraftMap, writer *uilive.Writer) {
 
 			distance := dist * 0.539957 // nm //0.621371 - statue mile
 
-			//tPing := time.Since(aircraft.lastPing)
-			tPos := time.Since(aircraft.lastPos)
-
 			theme := colorPalette["rainbow"]
-			var rowcolor color.Color
 
+			tPing := time.Since(aircraft.lastPing)
+			var rowcolor color.Color
+			stale := tPing > (time.Duration(10) * time.Second)
+			pendingEvict := tPing > (time.Duration(35) * time.Second)
 			if !stale && !pendingEvict {
 				rowcolor = theme[0]
 			} else if stale && !pendingEvict {
 				rowcolor = theme[1]
 			} else if pendingEvict {
 				rowcolor = theme[2]
+			}
+
+			tPos := time.Since(aircraft.lastPos)
+			var poscolor color.Color
+			posstale := tPos > (time.Duration(10) * time.Second)
+			pospendingEvict := tPos > (time.Duration(20) * time.Second)
+			//posevict := time.Since(aircraft.lastPos) > (time.Duration(59) * time.Second)
+
+			if !posstale && !pospendingEvict {
+				poscolor = theme[0]
+			} else if posstale && !pospendingEvict {
+				poscolor = theme[1]
+			} else if pospendingEvict {
+				poscolor = theme[2]
 			}
 
 			var vertRate string
@@ -167,13 +179,13 @@ func updateDisplay(knownAircraft *AircraftMap, writer *uilive.Writer) {
 				{Text: colorize(aircraft.callsign, rowcolor)},
 				//{Text: colorize(fmt.Sprintf("%x", i), rowcolor)},
 				{Text: colorize(squawk, rowcolor)},
-				{Text: colorize(sLatLon, rowcolor)},
+				{Text: colorize(sLatLon, poscolor)},
 				{Text: colorize(sAlt, rowcolor)},
 				{Text: colorize(vertRate, rowcolor)},
 				{Text: colorize(fmt.Sprintf("%d", aircraft.speed), rowcolor)},
 				{Text: colorize(fmt.Sprintf("%d", aircraft.heading), rowcolor)},
 				{Text: colorize(fmt.Sprintf("%3.1f", distance), rowcolor)},
-				{Text: colorize(fmt.Sprintf("%2d", uint8(tPos.Seconds())), rowcolor)},
+				{Text: colorize(fmt.Sprintf("%2d", uint8(tPing.Seconds())), rowcolor)},
 				//{Text: colorize(fmt.Sprintf("%.1f", aircraft.rssi), rowcolor)},
 			}
 

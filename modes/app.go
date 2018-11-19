@@ -25,7 +25,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"math"
 	"net"
-	"reflect"
 	"time"
 )
 
@@ -172,41 +171,14 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 		}
 
 		if len(currentMessage) == msgLen {
-			//log.Debugf("Message (Exact) len %d expected %d : %x", len(currentMessage), msgLen, currentMessage)
-			// Mark the rate because now we are going to actually parse the message
 			GoodRate.Mark(1)
-		} else if len(currentMessage) <= msgLen {
-			//log.Debugf("Message (Less) len %d expected %d : %x", len(currentMessage), msgLen, currentMessage)
-			BadRate.Mark(1)
-			continue
-		} else if len(currentMessage) > msgLen {
-			//log.Debugf("Message (More) len %d expected %d : %x", len(currentMessage), msgLen, currentMessage)
-			BadRate.Mark(1)
-			continue
-		}
-
-		isMlat := reflect.DeepEqual(currentMessage[1:7], magicTimestampMLAT)
-		if isMlat {
-			//fmt.Println("FROM MLAT")
-			//timestamp := parseTime(message[1:7])
-			//fmt.Println(otimestamp)
-			//timestamp = time.Now()
 		} else {
-			//timestamp = parseTime(message[1:7])
-			//_ = timestamp
-			//fmt.Println(timestamp)
+			BadRate.Mark(1)
+			continue
 		}
 
-/*		for i := 0; i < len(currentMessage[8:]); i++ {
-			if info.Debug {
-				log.Debugf("%02x", currentMessage[8:][i])
-			}
-		}
-*/
-/*		if info.Debug {
-			log.Debugf("\n")
-		}
-*/
+		isMlat := bytes.Equal(currentMessage[1:7], magicTimestampMLAT)
+
 		if msgType == 0x31 {
 			ac <- decodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)))
 		} else {

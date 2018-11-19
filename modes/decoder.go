@@ -361,9 +361,6 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 				aircraft.speed = int32(math.Sqrt(float64(nsv*nsv + ewv*ewv)))
 
 				if aircraft.speed != 0 {
-					//ewv := aircraft.ewv
-					//nsv := aircraft.nsv
-
 					if ewd != 0 {
 						ewv *= -1
 					}
@@ -373,7 +370,7 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 
 					heading := math.Atan2(float64(ewv), float64(nsv))
 
-					aircraft.heading = int16((heading * 360) / (math.Pi * 2))
+					aircraft.heading = int32((heading * 360) / (math.Pi * 2))
 					if aircraft.heading < 0 {
 						aircraft.heading += 360
 					}
@@ -382,7 +379,7 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 				}
 			} else if msgSubType == 3 || msgSubType == 4 {
 				aircraft.headingIsValid = message[5]&(1<<2) != 0
-				//aircraft.heading = uint16((360.0 / 128) * (((message[5] & 3) << 5) | (message[6] >> 3)))
+				aircraft.heading = int32(math.Round(360.0 / 128)) * (((int32(message[5]) & 3) << 5) | (int32(message[6]) >> 3))
 			}
 		}
 
@@ -409,6 +406,7 @@ func decodeExtendedSquitter(message []byte, linkFmt uint, aircraft *aircraftData
 			rawLongitude = uint32(message[8])&1<<16 + uint32(message[9])<<8 +
 				uint32(message[10])
 		}
+
 		if messageType != 20 && messageType != 21 && messageType != 22 {
 			//altitude :=
 			//log.Debugf("ac12: %#04x\n", ac12Data)

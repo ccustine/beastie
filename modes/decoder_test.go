@@ -30,52 +30,52 @@ func Test_decodeModeS(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want aircraftData
+		want AircraftData
 	}{
 		{
 			name: "Good test",
 			args: args{convertToBytes("8dad73a999117b9b8004285d1c83"),
 				false},
-			want: aircraftData{callsign: "AAL2748 "},
+			want: AircraftData{Callsign: "AAL2748 "},
 		},
 		{
 			name: "Callsign test",
 			args: args{convertToBytes("8da6c6c820053074db08208391f5"),
 				false},
-			want: aircraftData{icaoAddr:0xa6c6c8, callsign:"ASA460", eRawLat:0xffffffff, eRawLon:0xffffffff,
-				oRawLat:0xffffffff, oRawLon:0xffffffff, latitude:1.7976931348623157e+308,
-				longitude:1.7976931348623157e+308, altitude:2147483647, altUnit:0x0, ewd:0x0, ewv:0,
-				nsd: 0x0, nsv:0, vertRateSource:0x0, vertRateSign:0x0, vertRate:0, speed:0, heading:0,
-				headingIsValid:false, mlat:false},
+			want: AircraftData{IcaoAddr: 0xa6c6c8, Callsign:"ASA460", eRawLat:0xffffffff, eRawLon:0xffffffff,
+				oRawLat:0xffffffff, oRawLon:0xffffffff, Latitude:1.7976931348623157e+308,
+				Longitude: 1.7976931348623157e+308, Altitude:2147483647, AltUnit:0x0, ewd:0x0, ewv:0,
+				nsd: 0x0, nsv:0, VertRateSource:0x0, VertRateSign:0x0, VertRate:0, Speed:0, Heading:0,
+				HeadingIsValid: false, Mlat:false},
 		},
 		{
 			name: "Callsign test 2 index out of range",
 			args: args{convertToBytes("95e51fbf0ef3e3ba"),
 				false},
-			want: aircraftData{icaoAddr:0xa6c6c8, callsign:"ASA460", eRawLat:0xffffffff, eRawLon:0xffffffff,
-				oRawLat:0xffffffff, oRawLon:0xffffffff, latitude:1.7976931348623157e+308,
-				longitude:1.7976931348623157e+308, altitude:2147483647, altUnit:0x0, ewd:0x0, ewv:0,
-				nsd: 0x0, nsv:0, vertRateSource:0x0, vertRateSign:0x0, vertRate:0, speed:0, heading:0,
-				headingIsValid:false, lastPing:createTime("2018-10-24 08:20:10.827814 -0600 MDT m=+42.649475709"),
-				lastPos:createTime("2018-10-24 08:20:05.283828 -0600 MDT m=+37.105283228"), mlat:false},
+			want: AircraftData{IcaoAddr: 0xa6c6c8, Callsign:"ASA460", eRawLat:0xffffffff, eRawLon:0xffffffff,
+				oRawLat:0xffffffff, oRawLon:0xffffffff, Latitude:1.7976931348623157e+308,
+				Longitude: 1.7976931348623157e+308, Altitude:2147483647, AltUnit:0x0, ewd:0x0, ewv:0,
+				nsd: 0x0, nsv:0, VertRateSource:0x0, VertRateSign:0x0, VertRate:0, Speed:0, Heading:0,
+				HeadingIsValid: false, LastPing:createTime("2018-10-24 08:20:10.827814 -0600 MDT m=+42.649475709"),
+				LastPos: createTime("2018-10-24 08:20:05.283828 -0600 MDT m=+37.105283228"), Mlat:false},
 		},
 		{
 			name: "Too Short",
 			args: args{[]byte("8d4285d1c83"),
 				false},
-			want: aircraftData{},
+			want: AircraftData{},
 		},
 		{
 			name: "Bad CA",
 			args: args{[]byte("aaa8d4285d1c83"),
 				false},
-			want: aircraftData{},
+			want: AircraftData{},
 		},
 		{
 			name: "Bad test 3",
 			args: args{[]byte("8dad73a999117b9b8004285d"),
 				false},
-			want: aircraftData{},
+			want: AircraftData{},
 		},
 	}
 	for _, tt := range tests {
@@ -111,7 +111,7 @@ func Test_decodeExtendedSquitter(t *testing.T) {
 	type args struct {
 		message  []byte
 		linkFmt  uint
-		aircraft *aircraftData
+		aircraft *AircraftData
 	}
 	tests := []struct {
 		name string

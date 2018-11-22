@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package beastie
+package config
 
 import (
 	"fmt"
@@ -27,16 +27,17 @@ var (
 )
 
 type BeastInfo struct {
-	Sources		[]Source
-	Latitude 	float64	`yaml:"baseLat"`
-	Longitude	float64	`yaml:"baseLon"`
-	Debug 		bool	`yaml:"debug"`
-	Metrics 	bool 	`yaml:"metrics"`
+	Sources   []Source
+	Latitude  float64 `yaml:"baseLat"`
+	Longitude float64 `yaml:"baseLon"`
+	Debug     bool    `yaml:"debug"`
+	Metrics   bool    `yaml:"metrics"`
+	Output    string  `yaml:"output"`
 }
 
 type Source struct {
-	Host     	string 	`yaml:"host"`
-	Port	 	int 	`yaml:"port"`
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
 }
 
 const (
@@ -49,8 +50,8 @@ const (
 	BASELAT    = "lat"
 	BASELON    = "lon"
 	CONFIGFILE = "config"
+	OUTPUT     = "out"
 )
-
 
 func LoadConfig() {
 	// Find home directory.
@@ -66,13 +67,12 @@ func LoadConfig() {
 	} else {
 		viper.SetConfigName("config")
 		viper.AddConfigPath(".")
-		viper.AddConfigPath(home + "/.beastie")
+		viper.AddConfigPath(home + "/.config")
 	}
 
 	if err := viper.ReadInConfig(); err != nil {
-	// Maybe for testing
-	//if err := viper.ReadConfig(bytes.NewBuffer(yamlExample)); err != nil {
+		// Maybe for testing
+		//if err := viper.ReadConfig(bytes.NewBuffer(yamlExample)); err != nil {
 		log.Warnf("Can't read viper: %s\n", err)
 	}
 }
-

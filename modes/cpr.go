@@ -172,7 +172,7 @@ func decodeAC12Field(ac12Data uint) int32 {
 		n := int32((ac12Data&0x0FE0)>>1) + int32(ac12Data&0x000F)
 		return (n * 25) - 1000
 	} else {
-		/* Gillham coded altitude */
+		/* Gillham coded Altitude */
 		return int32(math.MaxInt32)
 	}
 }

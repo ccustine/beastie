@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package modes
+package app
 
 import (
 	"bufio"
 	"bytes"
 	"fmt"
 	"github.com/SierraSoftworks/multicast"
-	. "github.com/ccustine/beastie/beastie"
-	"github.com/ccustine/uilive"
+	. "github.com/ccustine/beastie/config"
+	"github.com/ccustine/beastie/modes"
+	"github.com/ccustine/beastie/output"
+	"github.com/ccustine/beastie/types"
 	"github.com/rcrowley/go-metrics"
 	log "github.com/sirupsen/logrus"
 	"math"
@@ -30,10 +32,9 @@ import (
 
 var (
 	magicTimestampMLAT = []byte{0xFF, 0x00, 0x4D, 0x4C, 0x41, 0x54}
-	uiWriter           *uilive.Writer
-	info               BeastInfo
-	knownAircraft      = NewAircraftMap()
-	aircraft           = make(chan aircraftData) //, 10)
+	Info               BeastInfo
+	knownAircraft      = types.NewAircraftMap()
+	aircraft           = make(chan types.AircraftData) //, 10)
 	GoodRate           = metrics.GetOrRegisterMeter("Message Rate (Good)", metrics.DefaultRegistry)
 	BadRate            = metrics.GetOrRegisterMeter("Message Rate (Bad)", metrics.DefaultRegistry)
 	ModeACCnt          = metrics.GetOrRegisterCounter("Message Rate (ModeA/C)", metrics.DefaultRegistry)
@@ -41,16 +42,12 @@ var (
 	ModesLongCnt       = metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
 )
 
-const (
-	aisChars = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&'()*+,-./0123456789:;<=>?"
-)
-
 type TCPClient struct {
 	Host string
 	Port int
 }
 
-func (c *TCPClient) start(ac chan aircraftData) {
+func (c *TCPClient) start(ac chan types.AircraftData) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.Host, c.Port))
 	if err != nil {
 		panic(err)
@@ -65,8 +62,8 @@ func (c *TCPClient) start(ac chan aircraftData) {
 }
 
 func Start(beastInfo BeastInfo) {
-	info = beastInfo
-	output := multicast.New()
+	Info = beastInfo
+	mcast := multicast.New()
 
 	sources := make(map[string]*TCPClient)
 	if beastInfo.Debug {
@@ -84,15 +81,27 @@ func Start(beastInfo BeastInfo) {
 		}
 	}
 
-	uiWriter = uilive.New()
-	uiWriter.RefreshInterval = 1000 * time.Millisecond
-	uiWriter.Start()
+	// TODO: Add a map or array to store generic Output interface types
+	// and access using the interface methods
+
+	var out output.Output
+	switch beastInfo.Output {
+	case output.TABLE:
+		out = output.NewTableOutput(&beastInfo)
+	case output.LOG:
+		out = output.NewLogOutput(&beastInfo)
+	case output.JSONAPI:
+		out = output.NewJsonOutput() //&beastInfo)
+	default:
+		out = output.NewTableOutput(&beastInfo)
+
+	}
 
 	go func() {
-		l := output.Listen()
+		l := mcast.Listen()
 		for {
 			acm :=  <- l.C
-			updateDisplay(acm.(*AircraftMap), uiWriter)
+			out.UpdateDisplay(acm.(*types.AircraftMap))
 		}
 	}()
 
@@ -101,7 +110,7 @@ func Start(beastInfo BeastInfo) {
 		for {
 			select {
 			case <-ticker.C:
-				output.C <- knownAircraft
+				mcast.C <- knownAircraft
 			}
 		}
 	}()
@@ -109,13 +118,23 @@ func Start(beastInfo BeastInfo) {
 	for {
 		select {
 		case airframe := <-aircraft:
-			knownAircraft.Store(airframe.icaoAddr, &airframe)
+			var evict bool
+			if !airframe.LastPing.IsZero() {
+				 evict = time.Since(airframe.LastPing) > (time.Duration(59) * time.Second)
+			}
+
+			if evict {
+				knownAircraft.Delete(airframe.IcaoAddr)
+				continue
+			}
+
+			knownAircraft.Store(airframe.IcaoAddr, &airframe)
 		}
 	}
 
 }
 
-func handleConnection(conn net.Conn, ac chan aircraftData) {
+func handleConnection(conn net.Conn, ac chan types.AircraftData) {
 	//reader := bufio.NewReaderSize(conn, 128)
 	reader := bufio.NewReader(conn)
 	scanner := bufio.NewScanner(reader)
@@ -137,7 +156,7 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 			validMessage = true
 		}
 		if !validMessage {
-			if info.Debug {
+			if Info.Debug {
 				log.Debugf("Not a valid Message with 0x31 32 33 34 Msg: %#x\n", currentMessage)
 			}
 			continue
@@ -151,7 +170,7 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 		case 0x31: // 1 - Mode A/C
 			ModeACCnt.Inc(1)
 			msgLen = 10
-			if info.Debug {
+			if Info.Debug {
 				log.Debugf("Invalid Beast mode msg type 1: %x", currentMessage)
 			}
 		case 0x32: // 2 - Mode S Short
@@ -161,7 +180,7 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 			ModesLongCnt.Inc(1)
 			msgLen = 22
 		case 0x34: // 4
-			if (info.Debug) {
+			if (Info.Debug) {
 				log.Debugf("Invalid Beast mode msg type 4: %x", currentMessage)
 			}
 			continue // not supported
@@ -180,14 +199,14 @@ func handleConnection(conn net.Conn, ac chan aircraftData) {
 		isMlat := bytes.Equal(currentMessage[1:7], magicTimestampMLAT)
 
 		if msgType == 0x31 {
-			ac <- decodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)))
+			ac <- modes.DecodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, &Info)
 		} else {
-			ac <- decodeModeS(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)))
+			ac <- modes.DecodeModeS(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, &Info)
 		}
 	}
 
 	if scanner.Err() != nil {
-		if info.Debug {
+		if Info.Debug {
 			log.Debugf("Scanner Error: %s\n", scanner.Err())
 		}
 	}

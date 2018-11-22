@@ -15,13 +15,13 @@
 package stream
 
 import (
-	"github.com/ccustine/beastie/modes"
+	"github.com/ccustine/beastie/config"
 	"github.com/spf13/cobra"
 )
 
-var info *modes.BeastInfo
+var info *config.BeastInfo
 
-func NewRootCmd(beastInfo *modes.BeastInfo) *cobra.Command {
+func NewRootCmd(beastInfo *config.BeastInfo) *cobra.Command {
 	info = beastInfo
 	cmd := &cobra.Command{
 		Use:   "stream",

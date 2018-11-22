@@ -2,7 +2,7 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/ccustine/beastie/beastie"
+	"github.com/ccustine/beastie/config"
 	"os"
 
 	"github.com/ccustine/beastie/cmd/stream"
@@ -35,7 +35,7 @@ var (
 	port      int
 	baseLat   float64
 	baseLon   float64
-	beastInfo = beastie.BeastInfo{}
+	beastInfo = config.BeastInfo{}
 )
 
 var cfg = viper.New()
@@ -47,13 +47,13 @@ func Execute() {
 
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:   "beastie",
+		Use:   "config",
 		Short: "Command utilities for Kapua",
-		Long: `beastie is the interactive command line
+		Long: `config is the interactive command line
 
-beastie is the interactive command line for displaying ADS-B data from a Beast / Mode-S radio.
+config is the interactive command line for displaying ADS-B data from a Beast / Mode-S radio.
 
-More info at https://github.io/ccustine/beastie`,
+More info at https://github.io/ccustine/config`,
 		Run: func(cmd *cobra.Command, args []string) {
 			//cmd.Usage()
 
@@ -86,7 +86,7 @@ More info at https://github.io/ccustine/beastie`,
 	rootCmd.AddCommand(versionCmd)
 
 	log.SetOutput(os.Stdout)
-	cobra.OnInitialize(beastie.LoadConfig)
+	cobra.OnInitialize(config.LoadConfig)
 
 	return rootCmd
 }

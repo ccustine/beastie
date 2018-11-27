@@ -54,7 +54,8 @@ type AircraftData struct {
 
 	Rssi float64
 
-	Mlat bool
+	Mlat    bool
+	IsValid bool
 }
 //type AircraftMap map[uint32]*AircraftData
 
@@ -120,8 +121,8 @@ type AircraftMap struct {
 	internal map[uint32]*AircraftData
 }
 
-func NewAircraftMap() *AircraftMap {
-	return &AircraftMap{
+func NewAircraftMap() AircraftMap {
+	return AircraftMap{
 		internal: make(map[uint32]*AircraftData),
 	}
 }

@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	aisChars = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&'()*+,-./0123456789:;<=>?"
+	aisChars             = "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_ !\"#$%&'()*+,-./0123456789:;<=>?"
 	MODES_GENERATOR_POLY = uint32(0xfff409)
 )
 
@@ -69,8 +69,8 @@ func DecodeModeS(message []byte, isMlat bool, sig float64, knownAircraft *types.
 	}
 
 	var aircraft types.AircraftData
-	var aircraftExists bool
-	aircraft.VertRateSign = math.MaxUint32
+	//var aircraftExists bool
+	//aircraft.VertRateSign = math.MaxUint32
 	icaoAddr := uint32(math.MaxUint32)
 	squawk := uint32(0)
 	//altCode := uint16(math.MaxUint16)
@@ -136,23 +136,24 @@ func DecodeModeS(message []byte, isMlat bool, sig float64, knownAircraft *types.
 	}
 
 	if icaoAddr != math.MaxUint32 {
-		var ptrAircraft *types.AircraftData
-		ptrAircraft, aircraftExists = knownAircraft.Load(icaoAddr)
+		ptrAircraft, aircraftExists := knownAircraft.Load(icaoAddr)
 		if !aircraftExists {
-			// initialize some values
+			// Initial values
 			aircraft = types.AircraftData{
-				IcaoAddr:  icaoAddr,
-				Squawk:    squawk,
-				ORawLat:   math.MaxUint32,
-				ORawLon:   math.MaxUint32,
-				ERawLat:   math.MaxUint32,
-				ERawLon:   math.MaxUint32,
-				Latitude:  math.MaxFloat64,
-				Longitude: math.MaxFloat64,
-				Altitude:  math.MaxInt32,
-				Callsign:  "",
-				Mlat:      isMlat,
-				Rssi:      sig,
+				IcaoAddr:     icaoAddr,
+				Squawk:       squawk,
+				ORawLat:      math.MaxUint32,
+				ORawLon:      math.MaxUint32,
+				ERawLat:      math.MaxUint32,
+				ERawLon:      math.MaxUint32,
+				Latitude:     math.MaxFloat64,
+				Longitude:    math.MaxFloat64,
+				Altitude:     math.MaxInt32,
+				Callsign:     "",
+				Mlat:         isMlat,
+				Rssi:         sig,
+				VertRateSign: math.MaxUint32,
+				IsValid:      true,
 			}
 		} else {
 			aircraft = *ptrAircraft
@@ -165,6 +166,9 @@ func DecodeModeS(message []byte, isMlat bool, sig float64, knownAircraft *types.
 			}
 		}
 		aircraft.LastPing = time.Now()
+	} else {
+		return types.AircraftData{IsValid: false}
+
 	}
 	//log.Debugf(aircraft)
 	//log.Debugf(aircraftExists)
@@ -177,9 +181,9 @@ func DecodeModeS(message []byte, isMlat bool, sig float64, knownAircraft *types.
 					log.Debugf("m_bit is %d, q_bit is %d\n", m_bit, q_bit)
 				}
 		*/
-		aircraft.AltUnit = 999
+		//var altUnit = 999
 		if m_bit == 0 {
-			aircraft.AltUnit = 0 //Feet
+			//altUnit = 0 //Feet
 			if (q_bit != 0) {
 				/* N is the 11 bit integer resulting from the removal of bit Q and M */
 				n := ((message[2] & 31) << 6) |
@@ -192,7 +196,7 @@ func DecodeModeS(message []byte, isMlat bool, sig float64, knownAircraft *types.
 				/* TODO: Implement Altitude where Q=0 and M=0 */
 			}
 		} else {
-			aircraft.AltUnit = 1
+			//altUnit = 1
 			/* TODO: Implement Altitude when meter unit is selected. */
 		}
 
@@ -239,19 +243,16 @@ func DecodeModeS(message []byte, isMlat bool, sig float64, knownAircraft *types.
 				"Mlat":    isMlat,
 				"Rssi":    sig,
 				"icao":    icaoAddr,
-				"msgtype":	msgType,
+				"msgtype": msgType,
 			})
 		}
 
-		if info.Debug {
-			contextLogger.Debugf("Returning Aircraft")
-		}
 		return aircraft
 	}
 	if info.Debug {
 		contextLogger.Debugf("Returning empty aircraft")
 	}
-	return types.AircraftData{}
+	return types.AircraftData{IsValid: false}
 	//log.Debugf(aircraft)
 }
 
@@ -354,9 +355,9 @@ func DecodeExtendedSquitter(message []byte, linkFmt uint, aircraft *types.Aircra
 		if msgSubType >= 1 && msgSubType <= 4 {
 			if msgSubType == 1 || msgSubType == 2 {
 				ewd := int32((message[5] & 4) >> 2)
-				ewv := (int32(message[5]) & 3) << 8 | int32(message[6])
+				ewv := (int32(message[5])&3)<<8 | int32(message[6])
 				nsd := int32((message[7] & 0x80) >> 7)
-				nsv := (int32(message[7]) & 0x7f) << 3 | (int32(message[8]) & 0xe0) >> 5
+				nsv := (int32(message[7])&0x7f)<<3 | (int32(message[8])&0xe0)>>5
 				aircraft.VertRateSource = uint((message[8] & 0x10) >> 4)
 				aircraft.VertRateSign = uint((message[8] & 0x8) >> 3)
 				aircraft.VertRate = int32(math.Round(float64(((int32((message[8]&7)<<6|(message[9]&0xfc)>>2)-1)*64)/25) * 25))
@@ -382,7 +383,7 @@ func DecodeExtendedSquitter(message []byte, linkFmt uint, aircraft *types.Aircra
 				}
 			} else if msgSubType == 3 || msgSubType == 4 {
 				aircraft.HeadingIsValid = message[5]&(1<<2) != 0
-				aircraft.Heading = int32(math.Round(360.0 / 128)) * (((int32(message[5]) & 3) << 5) | (int32(message[6]) >> 3))
+				aircraft.Heading = int32(math.Round(360.0/128)) * (((int32(message[5]) & 3) << 5) | (int32(message[6]) >> 3))
 			}
 		}
 

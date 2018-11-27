@@ -28,11 +28,11 @@ var (
 
 type BeastInfo struct {
 	Sources   []Source
-	Latitude  float64 `yaml:"baseLat"`
-	Longitude float64 `yaml:"baseLon"`
-	Debug     bool    `yaml:"debug"`
-	Metrics   bool    `yaml:"metrics"`
-	Output    string  `yaml:"output"`
+	Latitude  float64  `yaml:"baseLat"`
+	Longitude float64  `yaml:"baseLon"`
+	Debug     bool     `yaml:"debug"`
+	Metrics   bool     `yaml:"metrics"`
+	Outputs   []string `yaml:"output"`
 }
 
 type Source struct {

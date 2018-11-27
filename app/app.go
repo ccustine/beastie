@@ -81,35 +81,46 @@ func Start(beastInfo BeastInfo) {
 		}
 	}
 
-	// TODO: Add a map or array to store generic Output interface types
+	// TODO: Add a map or array to store generic Outputs interface types
 	// and access using the interface methods
 
-	var out output.Output
-	switch beastInfo.Output {
-	case output.TABLE:
-		out = output.NewTableOutput(&beastInfo)
-	case output.LOG:
-		out = output.NewLogOutput(&beastInfo)
-	case output.JSONAPI:
-		out = output.NewJsonOutput() //&beastInfo)
-	default:
-		out = output.NewTableOutput(&beastInfo)
-
-	}
-
-	go func() {
-		l := mcast.Listen()
-		for {
-			acm :=  <- l.C
-			out.UpdateDisplay(acm.(*types.AircraftMap))
+	var outputs = make([]interface{}, len(beastInfo.Outputs))
+	for i, outtype := range beastInfo.Outputs {
+		switch outtype {
+		case output.TABLE:
+			outputs[i] = output.NewTableOutput(&beastInfo)
+		case output.LOG:
+			outputs[i] = output.NewLogOutput(&beastInfo)
+		case output.JSONAPI:
+			outputs[i] = output.NewJsonOutput()
+		default:
+			outputs[i] = output.NewTableOutput(&beastInfo)
 		}
-	}()
+		go func(op output.Output) {
+			l := mcast.Listen()
+			for {
+				acm := <-l.C
+				op.UpdateDisplay(acm.(types.AircraftMap))
+			}
+		}(outputs[i].(output.Output))
+	}
 
 	go func() {
 		ticker := time.NewTicker(1000 * time.Millisecond)
 		for {
 			select {
 			case <-ticker.C:
+				evict := false
+				for _, aircraft := range knownAircraft.Range() {
+					if !aircraft.LastPing.IsZero() {
+						evict = time.Since(aircraft.LastPing) > (time.Duration(59) * time.Second)
+					}
+
+					if evict {
+						knownAircraft.Delete(aircraft.IcaoAddr)
+						continue
+					}
+				}
 				mcast.C <- knownAircraft
 			}
 		}
@@ -118,16 +129,9 @@ func Start(beastInfo BeastInfo) {
 	for {
 		select {
 		case airframe := <-aircraft:
-			var evict bool
-			if !airframe.LastPing.IsZero() {
-				 evict = time.Since(airframe.LastPing) > (time.Duration(59) * time.Second)
-			}
-
-			if evict {
-				knownAircraft.Delete(airframe.IcaoAddr)
+			if !airframe.IsValid {
 				continue
 			}
-
 			knownAircraft.Store(airframe.IcaoAddr, &airframe)
 		}
 	}
@@ -199,9 +203,9 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) {
 		isMlat := bytes.Equal(currentMessage[1:7], magicTimestampMLAT)
 
 		if msgType == 0x31 {
-			ac <- modes.DecodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, &Info)
+			ac <- modes.DecodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), &knownAircraft, &Info)
 		} else {
-			ac <- modes.DecodeModeS(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, &Info)
+			ac <- modes.DecodeModeS(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), &knownAircraft, &Info)
 		}
 	}
 
@@ -215,16 +219,13 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) {
 
 func ScanModeS(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
-		//fmt.Sprintln("At EOF")
 		return 0, nil, nil
 	}
 	if i := bytes.IndexByte(data, 0x1a); i >= 0 {
-		//fmt.Sprintf("Found delim at %d, data is %#x\n", i, data)
 		return i + 1, data[0:i], nil
 	}
 	// If we're at EOF, we have a final, non-terminated line. Return it.
 	if atEOF {
-		//fmt.Sprintf("At EOF with final token %#x\n", data)
 		return len(data), data, nil
 	}
 	// Request more data.

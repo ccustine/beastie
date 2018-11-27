@@ -28,8 +28,8 @@ var (
 type AircraftList []*types.AircraftData
 
 type Output interface {
-	UpdateDisplay(aircraftMap *types.AircraftMap)
-	//NewTableOutput(*config.BeastInfo) *Output
+	UpdateDisplay(aircraftMap types.AircraftMap)
+	//NewTableOutput(*config.BeastInfo) *Outputs
 }
 
 // List utilities

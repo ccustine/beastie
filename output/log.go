@@ -52,7 +52,7 @@ func NewLogOutput(info *config.BeastInfo) *LogOutput {
 	return &LogOutput{Beastinfo:info, Aclog:aclog, ACLogFile:file}
 }
 
-func (o LogOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
+func (o LogOutput) UpdateDisplay(knownAircraft types.AircraftMap) {
 	//var b strings.Builder
 
 	sortedAircraft := make(AircraftList, 0, knownAircraft.Len())

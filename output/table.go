@@ -80,7 +80,7 @@ func NewTableOutput(info *config.BeastInfo) *TableOutput {
 	return &TableOutput{Writer:writer,Beastinfo:info}
 }
 
-func (o TableOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
+func (o TableOutput) UpdateDisplay(knownAircraft types.AircraftMap) {
 	displayTable.Body.Cells = [][]*simpletable.Cell{}
 	var b strings.Builder
 

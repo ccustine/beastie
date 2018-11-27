@@ -87,8 +87,8 @@ Read more at https://github.io/ccustine/config`,
 	}
 
 	// Persistent == available to sub commands
-	rootCmd.PersistentFlags().BoolVarP(&debug, DEBUG, "d", false, "Output debug level logging.")
-	rootCmd.PersistentFlags().BoolVarP(&metricflag, METRICS, "m", false, "Output Metrics")
+	rootCmd.PersistentFlags().BoolVarP(&debug, DEBUG, "d", false, "Outputs debug level logging.")
+	rootCmd.PersistentFlags().BoolVarP(&metricflag, METRICS, "m", false, "Outputs Metrics")
 	rootCmd.PersistentFlags().StringVarP(&ConfigFile, CONFIGFILE, "c", "", "viper file (default is $HOME/.config.yaml)")
 
 	// Must override default help flag to use -h for Host
@@ -99,7 +99,7 @@ Read more at https://github.io/ccustine/config`,
 	rootCmd.PersistentFlags().IntVar(&mlatSource.Port, MLAT_PORT, 0, "Beast mode port to connect to")
 	rootCmd.PersistentFlags().Float64VarP(&beastInfo.Latitude, BASELAT, "", 40.135, "Beast mode port to connect to")
 	rootCmd.PersistentFlags().Float64VarP(&beastInfo.Longitude, BASELON, "", -104.997, "Beast mode port to connect to")
-	rootCmd.PersistentFlags().StringVar(&beastInfo.Output, OUTPUT, "", "Set the BEAST_HOST for the Everyware Cloud API endpoint")
+	rootCmd.PersistentFlags().StringSliceVarP(&beastInfo.Outputs, OUTPUT, "o", []string{"table"},"Set the BEAST_HOST for the Everyware Cloud API endpoint")
 
 	viper.BindPFlag("sources.adsb.host", rootCmd.PersistentFlags().Lookup(BEAST_HOST))
 	viper.BindPFlag("sources.adsb.port", rootCmd.PersistentFlags().Lookup(BEAST_PORT))

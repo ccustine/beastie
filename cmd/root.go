@@ -62,8 +62,8 @@ More info at https://github.io/ccustine/config`,
 	}
 
 	// Persistent == available to sub commands
-	rootCmd.PersistentFlags().BoolVarP(&debug, DEBUG, "d", false, "Output debug level logging.")
-	rootCmd.PersistentFlags().BoolVarP(&metrics, METRICS, "m", false, "Output Metrics")
+	rootCmd.PersistentFlags().BoolVarP(&debug, DEBUG, "d", false, "Outputs debug level logging.")
+	rootCmd.PersistentFlags().BoolVarP(&metrics, METRICS, "m", false, "Outputs Metrics")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, CONFIGFILE, "", "cfg file (default is $HOME/.kapgun.yaml)")
 
 	// Must override default help flag to use -h for Host

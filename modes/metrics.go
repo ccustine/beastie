@@ -89,7 +89,7 @@ func LogOnce(r metrics.Registry, l Logger) {
 	})
 }
 
-// Output each metric in the given registry periodically using the given
+// Outputs each metric in the given registry periodically using the given
 // logger. Print timings in `scale` units (eg time.Millisecond) rather than nanos.
 func LogScaled(r metrics.Registry, freq time.Duration, scale time.Duration, l Logger) {
 	du := float64(scale)

@@ -28,7 +28,7 @@ var (
 type AircraftList []*types.AircraftData
 
 type Output interface {
-	UpdateDisplay(aircraftMap types.AircraftMap)
+	UpdateDisplay(aircraftMap *types.AircraftMap)
 	//NewTableOutput(*config.BeastInfo) *Outputs
 }
 

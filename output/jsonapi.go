@@ -30,7 +30,7 @@ const (
 )
 
 type JsonOutput struct {
-	knownAircraft *types.AircraftMap
+	knownAircraft types.AircraftMap
 }
 
 func NewJsonOutput() *JsonOutput {
@@ -66,7 +66,7 @@ func NewJsonOutput() *JsonOutput {
 }
 
 func (o JsonOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
-	o.knownAircraft = knownAircraft
+	o.knownAircraft = *knownAircraft
 	//var b strings.Builder
 
 	//sortedAircraft := make(AircraftList, 0, knownAircraft.Len())

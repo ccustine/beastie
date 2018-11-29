@@ -121,38 +121,49 @@ type AircraftMap struct {
 	internal map[uint32]*AircraftData
 }
 
-func NewAircraftMap() AircraftMap {
-	return AircraftMap{
+func NewAircraftMap() *AircraftMap {
+	return &AircraftMap{
 		internal: make(map[uint32]*AircraftData),
 	}
 }
 
 func (am *AircraftMap) Load(key uint32) (value *AircraftData, ok bool) {
 	am.RLock()
+	defer am.RUnlock()
 	result, ok := am.internal[key]
-	am.RUnlock()
+	//am.RUnlock()
 	return result, ok
 }
 
 func (am *AircraftMap) Delete(key uint32) {
 	am.Lock()
+	defer am.Unlock()
 	delete(am.internal, key)
-	am.Unlock()
+	//am.Unlock()
 }
 
 func (am *AircraftMap) Store(key uint32, value *AircraftData) {
 	am.Lock()
+	defer am.Unlock()
 	am.internal[key] = value
-	am.Unlock()
+	//am.Unlock()
 }
 
 func (am *AircraftMap) Len() (length int) {
 	am.RLock()
+	defer am.RUnlock()
 	result := len(am.internal)
-	am.RUnlock()
+	//am.RUnlock()
 	return result
 }
 
-func (am *AircraftMap) Range() (map[uint32]*AircraftData) {
-	return am.internal
+func (am *AircraftMap) Range() ([]*AircraftData) {
+	am.RLock()
+	defer am.RUnlock()
+	result := make([]*AircraftData, 0, len(am.internal))
+	for _, ac := range am.internal {
+		result = append(result, ac)
+	}
+	//am.RUnlock()
+	return result
 }

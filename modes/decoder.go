@@ -232,7 +232,12 @@ func DecodeModeS(message []byte, isMlat bool, sig float64, knownAircraft *types.
 		//if info.Debug {
 		//	spew.Dump(message)
 		//}
-		DecodeExtendedSquitter(message, uint(df), &aircraft, info)
+		if len(message) != 14 {
+			log.Debug("ES Message was not 14 bytes: %x", message)
+			// TODO: Maybe need to return empty aircraft here?
+		} else {
+			DecodeExtendedSquitter(message, uint(df), &aircraft, info)
+		}
 	}
 
 	//log.Info("Returning Aircraft")
@@ -300,17 +305,17 @@ func DecodeExtendedSquitter(message []byte, linkFmt uint, aircraft *types.Aircra
 		if linkFmt == 18 {
 			switch message[0] & 7 {
 			case 1:
-				log.Debugf("Non-ICAO")
+				log.Debugf("ES Non-ICAO")
 			case 2:
-				log.Debugf("TIS-B fine")
+				log.Debugf("ES TIS-B fine")
 			case 3:
-				log.Debugf("TIS-B coarse")
+				log.Debugf("ES TIS-B coarse")
 			case 5:
-				log.Debugf("TIS-B anon ADS-B relay")
+				log.Debugf("ES TIS-B anon ADS-B relay")
 			case 6:
-				log.Debugf("ADS-B rebroadcast")
+				log.Debugf("ES ADS-B rebroadcast")
 			default:
-				log.Debugf("Non-ICAO unknown")
+				log.Debugf("ES Non-ICAO unknown")
 			}
 		}
 	}

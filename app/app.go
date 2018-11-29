@@ -100,7 +100,7 @@ func Start(beastInfo BeastInfo) {
 			l := mcast.Listen()
 			for {
 				acm := <-l.C
-				op.UpdateDisplay(acm.(types.AircraftMap))
+				op.UpdateDisplay(acm.(*types.AircraftMap))
 			}
 		}(outputs[i].(output.Output))
 	}
@@ -174,9 +174,6 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) {
 		case 0x31: // 1 - Mode A/C
 			ModeACCnt.Inc(1)
 			msgLen = 10
-			if Info.Debug {
-				log.Debugf("Invalid Beast mode msg type 1: %x", currentMessage)
-			}
 		case 0x32: // 2 - Mode S Short
 			ModesShortCnt.Inc(1)
 			msgLen = 15
@@ -203,9 +200,9 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) {
 		isMlat := bytes.Equal(currentMessage[1:7], magicTimestampMLAT)
 
 		if msgType == 0x31 {
-			ac <- modes.DecodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), &knownAircraft, &Info)
+			ac <- modes.DecodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, &Info)
 		} else {
-			ac <- modes.DecodeModeS(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), &knownAircraft, &Info)
+			ac <- modes.DecodeModeS(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, &Info)
 		}
 	}
 
@@ -219,14 +216,16 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) {
 
 func ScanModeS(data []byte, atEOF bool) (advance int, token []byte, err error) {
 	if atEOF && len(data) == 0 {
-		return 0, nil, nil
+		log.Warn("Splitter detected EOF AND len(data)==0")
+		return 0, nil, bufio.ErrFinalToken
 	}
 	if i := bytes.IndexByte(data, 0x1a); i >= 0 {
 		return i + 1, data[0:i], nil
 	}
 	// If we're at EOF, we have a final, non-terminated line. Return it.
 	if atEOF {
-		return len(data), data, nil
+		log.Warn("Splitter detected EOF but has data")
+		return len(data), data, bufio.ErrFinalToken
 	}
 	// Request more data.
 	return 0, nil, nil

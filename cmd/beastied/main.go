@@ -144,16 +144,16 @@ func begin(cmd *cobra.Command, args []string) {
 		beastInfo.Sources = append(beastInfo.Sources, *adsbSource)
 	} else {
 		beastInfo.Sources = append(beastInfo.Sources, Source{
-			viper.GetString("sources.adsb.host"),
-			viper.GetInt("sources.adsb.port")})
+			Host: viper.GetString("sources.adsb.host"),
+			Port: viper.GetInt("sources.adsb.port")})
 	}
 
 	if !viper.IsSet("sources.mlat") {
 		beastInfo.Sources = append(beastInfo.Sources, *mlatSource)
 	} else {
 		beastInfo.Sources = append(beastInfo.Sources, Source{
-			viper.GetString("sources.mlat.host"),
-			viper.GetInt("sources.mlat.port")})
+			Host: viper.GetString("sources.mlat.host"),
+			Port: viper.GetInt("sources.mlat.port")})
 	}
 
 	//viper.UnmarshalKey("sources.adsb", &adsbSource)

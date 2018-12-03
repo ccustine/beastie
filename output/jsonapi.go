@@ -71,15 +71,13 @@ func (o JsonOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
 
 	//sortedAircraft := make(AircraftList, 0, knownAircraft.Len())
 
-	//knownAircraft.RLocker().Lock()
-	//for _, aircraft := range knownAircraft.Range() {
+	//for _, aircraft := range knownAircraft.Copy() {
 	//	sortedAircraft = append(sortedAircraft, aircraft)
 	//}
-	//knownAircraft.RLocker().Unlock()
 
 	//sort.Sort(sortedAircraft)
 
-	//for _, aircraft := range knownAircraft.Range() {
+	//for _, aircraft := range knownAircraft.Copy() {
 	//	evict := time.Since(aircraft.LastPing) > (time.Duration(59) * time.Second)
 	//
 	//	if evict {
@@ -113,13 +111,11 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 
 	sortedAircraft := make(AircraftList, 0, acm.Len())
 
-	acm.RLocker().Lock()
-	for _, aircraft := range acm.Range() {
+	for _, aircraft := range acm.Copy() {
 		acmb, _ := json.Marshal(aircraft)
 		b.Write(acmb)
 		sortedAircraft = append(sortedAircraft, aircraft)
 	}
-	acm.RLocker().Unlock()
 
 
 	//response, _ := json.Marshal(sortedAircraft)

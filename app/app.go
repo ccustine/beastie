@@ -53,8 +53,18 @@ func (c *TCPClient) start(ac chan types.AircraftData) {
 		panic(err)
 	}
 
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
+	var conn net.Conn
+	if conn, err = net.DialTCP("tcp", nil, tcpAddr); err != nil {
+		fmt.Printf("Unable to connect to host %s: %s\n", tcpAddr, err)
+		log.Error(err)
+		return
+	}
+
+	if err = conn.(*net.TCPConn).SetKeepAlivePeriod(10 * time.Second); err != nil {
+		log.Error(err)
+	}
+
+	if err = conn.(*net.TCPConn).SetKeepAlive(true); err != nil {
 		log.Error(err)
 	}
 
@@ -71,8 +81,8 @@ func Start(beastInfo BeastInfo) {
 	}
 
 	for _, source := range beastInfo.Sources {
-		sourceKey := fmt.Sprintf("%s:%d", source.Host, source.Port)
 		if source.Host != "" && source.Port != 0 {
+			sourceKey := fmt.Sprintf("%s:%d", source.Host, source.Port)
 			sources[sourceKey] = &TCPClient{
 				Host: source.Host,
 				Port: source.Port,
@@ -80,9 +90,6 @@ func Start(beastInfo BeastInfo) {
 			sources[sourceKey].start(aircraft)
 		}
 	}
-
-	// TODO: Add a map or array to store generic Outputs interface types
-	// and access using the interface methods
 
 	var outputs = make([]interface{}, len(beastInfo.Outputs))
 	for i, outtype := range beastInfo.Outputs {
@@ -111,7 +118,7 @@ func Start(beastInfo BeastInfo) {
 			select {
 			case <-ticker.C:
 				evict := false
-				for _, aircraft := range knownAircraft.Range() {
+				for _, aircraft := range knownAircraft.Copy() {
 					if !aircraft.LastPing.IsZero() {
 						evict = time.Since(aircraft.LastPing) > (time.Duration(59) * time.Second)
 					}
@@ -146,7 +153,11 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) {
 
 	defer conn.Close()
 
-	for scanner.Scan() {
+	for  {
+		if ok := scanner.Scan(); !ok {
+			log.Errorf("Scanner has a problem...")
+			break
+		}
 		currentMessage := scanner.Bytes()
 
 		// Connection closed
@@ -207,9 +218,7 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) {
 	}
 
 	if scanner.Err() != nil {
-		if Info.Debug {
-			log.Debugf("Scanner Error: %s\n", scanner.Err())
-		}
+		log.Errorf("Scanner Error: %s\n", scanner.Err())
 	}
 
 }

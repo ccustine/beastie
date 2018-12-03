@@ -658,13 +658,11 @@ func modesChecksum(message []byte, bits uint) uint32 {
 
 	n := bits / 8
 
-	//assert(bits%8 == 0)
-	//assert(n >= 3)
+	if !(bits%8 == 0) || n < 3 {
+		return 0
+	}
 
 	for i = 0; i < n-3; i = i + 1 {
-		//log.Debugf("Checksum message %x", message)
-		//log.Debugf("Checksum index %d, n is %d", i, n)
-		//log.Debugf("Checksum calc %d", uint32(message[i])^((rem&0xff0000)>>16))
 		rem = (rem << 8) ^ crcTable[uint32(message[i])^((rem&0xff0000)>>16)]
 		rem = rem & 0xffffff
 	}

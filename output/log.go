@@ -57,35 +57,16 @@ func (o LogOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
 
 	sortedAircraft := make(AircraftList, 0, knownAircraft.Len())
 
-	knownAircraft.RLocker().Lock()
-	for _, aircraft := range knownAircraft.Range() {
+	for _, aircraft := range knownAircraft.Copy() {
 		sortedAircraft = append(sortedAircraft, aircraft)
 	}
-	knownAircraft.RLocker().Unlock()
 
 	sort.Sort(sortedAircraft)
 
 	for _, aircraft := range sortedAircraft {
-/*		evict := time.Since(aircraft.LastPing) > (time.Duration(59) * time.Second)
-
-		if evict {
-			if o.Beastinfo.Debug {
-				log.Debugf("Evicting %d", aircraft.IcaoAddr)
-			}
-			knownAircraft.Delete(aircraft.IcaoAddr)
-			continue
-		}
-*/
-		/*		aircraftHasLocation := aircraft.Latitude != math.MaxFloat64 &&
-			aircraft.Longitude != math.MaxFloat64
-		aircraftHasAltitude := aircraft.Altitude != math.MaxInt32
-*/
-
-		//displayTable.SetStyle(simpletable.StyleCompact)
-		//b.WriteString(spew.Sprintln(aircraft))
-		//b.WriteString("\n")
 		jsonString, _ := json.MarshalIndent(aircraft, "", "\t")
-		o.ACLogFile.WriteString(string(jsonString))
-		//o.Aclog.Info(string(jsonString))
+		if _, err := o.ACLogFile.Write(jsonString); err != nil {
+			log.Warnf("Unable to write to json file: %s", err)
+		}
 	}
 }

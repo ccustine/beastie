@@ -97,7 +97,7 @@ func (a *AircraftData) MarshalJSON() ([]byte, error) {
 		VertRateSign uint   `json:"VertRateSign"`
 		Speed        int32  `json:"Speed"`
 		Heading      int32  `json:"Heading"`
-		Distance      int32  `json:"Heading"`
+		Distance      int32  `json:"Distance"`
 		Callsign      string  `json:"Callsign"`
 		//*Alias
 	}{
@@ -129,41 +129,41 @@ func NewAircraftMap() *AircraftMap {
 
 func (am *AircraftMap) Load(key uint32) (value *AircraftData, ok bool) {
 	am.RLock()
-	defer am.RUnlock()
+	//defer am.RUnlock()
 	result, ok := am.internal[key]
-	//am.RUnlock()
+	am.RUnlock()
 	return result, ok
 }
 
 func (am *AircraftMap) Delete(key uint32) {
 	am.Lock()
-	defer am.Unlock()
+	//defer am.Unlock()
 	delete(am.internal, key)
-	//am.Unlock()
+	am.Unlock()
 }
 
 func (am *AircraftMap) Store(key uint32, value *AircraftData) {
 	am.Lock()
-	defer am.Unlock()
+	//defer am.Unlock()
 	am.internal[key] = value
-	//am.Unlock()
+	am.Unlock()
 }
 
 func (am *AircraftMap) Len() (length int) {
 	am.RLock()
-	defer am.RUnlock()
+	//defer am.RUnlock()
 	result := len(am.internal)
-	//am.RUnlock()
+	am.RUnlock()
 	return result
 }
 
-func (am *AircraftMap) Range() ([]*AircraftData) {
+func (am *AircraftMap) Copy() ([]*AircraftData) {
 	am.RLock()
-	defer am.RUnlock()
+	//defer am.RUnlock()
 	result := make([]*AircraftData, 0, len(am.internal))
 	for _, ac := range am.internal {
 		result = append(result, ac)
 	}
-	//am.RUnlock()
+	am.RUnlock()
 	return result
 }

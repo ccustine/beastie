@@ -17,12 +17,14 @@ package app
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"github.com/SierraSoftworks/multicast"
 	. "github.com/ccustine/beastie/config"
 	"github.com/ccustine/beastie/modes"
 	"github.com/ccustine/beastie/output"
 	"github.com/ccustine/beastie/types"
+	"github.com/cenkalti/backoff"
 	"github.com/rcrowley/go-metrics"
 	log "github.com/sirupsen/logrus"
 	"math"
@@ -48,16 +50,43 @@ type TCPClient struct {
 }
 
 func (c *TCPClient) start(ac chan types.AircraftData) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", c.Host, c.Port))
-	if err != nil {
+	go func() {
+		_ = backoff.Retry(func() (error) {
+			var conn net.Conn
+			var err error
+			if conn, err = openConnection(c.Host, c.Port); err != nil {
+				log.Errorf("Couldn't open connection: %s", err.Error())
+				return err
+			}
+			handlerErr := handleConnection(conn, ac)
+			return handlerErr
+		},
+		backoff.WithMaxRetries(backoff.NewConstantBackOff(1 * time.Second), 30))
+		//log.Errorf("Handler bailed with error: %s", outerErr.Error())
+		fmt.Println("Error in retry")
+	}()
+}
+
+func openConnection(host string, port int) (conn net.Conn, err error){
+	var tcpAddr *net.TCPAddr
+
+	if tcpAddr, err = net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", host, port)); err != nil {
 		panic(err)
 	}
 
-	var conn net.Conn
-	if conn, err = net.DialTCP("tcp", nil, tcpAddr); err != nil {
-		fmt.Printf("Unable to connect to host %s: %s\n", tcpAddr, err)
-		log.Error(err)
-		return
+	// TODO: Collect status of individual connections for UI feedback
+	err = backoff.Retry(func() (err error) {
+		if conn, err = net.DialTCP("tcp", nil, tcpAddr); err != nil {
+			log.Error(err)
+			return err
+		}
+		return nil
+	},
+	backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 5))
+
+	if err != nil {
+		log.Errorf("Retry failed: %s", err)
+		return nil, err
 	}
 
 	if err = conn.(*net.TCPConn).SetKeepAlivePeriod(10 * time.Second); err != nil {
@@ -68,7 +97,7 @@ func (c *TCPClient) start(ac chan types.AircraftData) {
 		log.Error(err)
 	}
 
-	go handleConnection(conn, ac)
+	return conn, nil
 }
 
 func Start(beastInfo BeastInfo) {
@@ -145,7 +174,7 @@ func Start(beastInfo BeastInfo) {
 
 }
 
-func handleConnection(conn net.Conn, ac chan types.AircraftData) {
+func handleConnection(conn net.Conn, ac chan types.AircraftData) (err error) {
 	//reader := bufio.NewReaderSize(conn, 128)
 	reader := bufio.NewReader(conn)
 	scanner := bufio.NewScanner(reader)
@@ -219,8 +248,10 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) {
 
 	if scanner.Err() != nil {
 		log.Errorf("Scanner Error: %s\n", scanner.Err())
+		return scanner.Err()
 	}
 
+	return errors.New("scanner ended normally")
 }
 
 func ScanModeS(data []byte, atEOF bool) (advance int, token []byte, err error) {

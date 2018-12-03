@@ -6,7 +6,7 @@ require (
 	github.com/alexeyco/simpletable v0.0.0-20180729223640-1fa9009f1080
 	github.com/aybabtme/rgbterm v0.0.0-20170906152045-cc83f3b3ce59
 	github.com/ccustine/uilive v0.0.0-20181030235424-7a7bfad3dc86
-	github.com/cenkalti/backoff v2.1.0+incompatible // indirect
+	github.com/cenkalti/backoff v2.1.0+incompatible
 	github.com/davecgh/go-spew v1.1.1
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5 // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181103185306-d547d1d9531e // indirect

@@ -72,7 +72,7 @@ func openConnection(host string, port int) (conn net.Conn, err error){
 	var tcpAddr *net.TCPAddr
 
 	if tcpAddr, err = net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", host, port)); err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	// TODO: Collect status of individual connections for UI feedback

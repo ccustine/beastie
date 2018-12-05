@@ -54,6 +54,7 @@ func (c *TCPClient) start(ac chan types.AircraftData) {
 		_ = backoff.Retry(func() (error) {
 			var conn net.Conn
 			var err error
+			log.Infof("Opening connection for %s:%d", c.Host, c.Port)
 			if conn, err = openConnection(c.Host, c.Port); err != nil {
 				log.Errorf("Couldn't open connection: %s", err.Error())
 				return err

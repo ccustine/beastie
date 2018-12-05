@@ -662,8 +662,9 @@ func modesChecksum(message []byte, bits uint) uint32 {
 		return 0
 	}
 
-	for i = 0; i < n-3; i = i + 1 {
-		rem = (rem << 8) ^ crcTable[uint32(message[i])^((rem&0xff0000)>>16)]
+	for i = 0; i < n-3; i += 1 {
+		result := uint32(message[i])^((rem&0xff0000)>>16)
+		rem = (rem << 8) ^ crcTable[result]
 		rem = rem & 0xffffff
 	}
 

@@ -658,7 +658,7 @@ func modesChecksum(message []byte, bits uint) uint32 {
 
 	n := bits / 8
 
-	if !(bits%8 == 0) || n < 3 {
+	if !(bits%8 == 0) || n < 3 || uint(len(message)) < n-3{
 		return 0
 	}
 

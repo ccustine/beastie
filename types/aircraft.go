@@ -87,18 +87,18 @@ func (a *AircraftData) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(&struct {
-		IcaoAddr     string `json:"IcaoAddr"`
-		Squawk       string `json:"Squawk"`
-		VertRate     string `json:"VertRate"`
-		Latitude     string `json:"Latitude"`
-		Longitude    string `json:"Longitude"`
-		MLat         bool   `json:"isMlat"`
-		Altitude     int32  `json:"Altitude"`
-		VertRateSign uint   `json:"VertRateSign"`
-		Speed        int32  `json:"Speed"`
-		Heading      int32  `json:"Heading"`
-		Distance      int32  `json:"Distance"`
-		Callsign      string  `json:"Callsign"`
+		IcaoAddr     string `json:"icao"`
+		Squawk       string `json:"xpdr,omitempty"`
+		VertRate     string `json:"vrt,omitempty"`
+		Latitude     string `json:"lat,omitempty"`
+		Longitude    string `json:"lon,omitempty"`
+		MLat         bool   `json:"mlat,omitempty"`
+		Altitude     int32  `json:"alt,omitempty"`
+		VertRateSign uint   `json:"vrtsgn,omitempty"`
+		Speed        int32  `json:"spd,omitempty"`
+		Heading      int32  `json:"hdg,omitempty"`
+		Distance      int32  `json:"rng,omitempty"`
+		Callsign      string  `json:"call,omitempty"`
 		//*Alias
 	}{
 		IcaoAddr:     fmt.Sprintf("%06x", a.IcaoAddr),

@@ -30,7 +30,7 @@ import (
 )
 
 func main() {
-	NewRootCmd().Execute()
+	NewBeastiedCmd().Execute()
 }
 
 var (
@@ -50,7 +50,7 @@ func Execute() {
 	//utils.StopOnErr(RootCmd.Execute())
 }
 
-func NewRootCmd() *cobra.Command {
+func NewBeastiedCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "beastied",
 		Short: "Beastie server daemon",

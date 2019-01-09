@@ -62,8 +62,7 @@ func (c *TCPClient) start(ac chan types.AircraftData) {
 			handlerErr := handleConnection(conn, ac)
 			return handlerErr
 		},
-		backoff.WithMaxRetries(backoff.NewConstantBackOff(1 * time.Second), 30))
-		//log.Errorf("Handler bailed with error: %s", outerErr.Error())
+		backoff.NewConstantBackOff(1 * time.Second))
 		fmt.Println("Error in retry")
 	}()
 }
@@ -163,6 +162,8 @@ func Start(beastInfo BeastInfo) {
 		}
 	}()
 
+	// TODO: Add stream outputs to send real time messages directly to consumers
+	// TODO: ie, stream to a DB consumer that stores ALL data and updates to a DB
 	for {
 		select {
 		case airframe := <-aircraft:
@@ -170,6 +171,7 @@ func Start(beastInfo BeastInfo) {
 				continue
 			}
 			knownAircraft.Store(airframe.IcaoAddr, &airframe)
+			//TODO: mcast or something similar to stream consumers?
 		}
 	}
 

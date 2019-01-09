@@ -20,6 +20,7 @@ require (
 	github.com/lib/pq v1.0.0 // indirect
 	github.com/mattn/go-isatty v0.0.4 // indirect
 	github.com/mitchellh/go-homedir v1.0.0
+	github.com/r3labs/sse v0.0.0-20181203121225-f81257c4e655
 	github.com/rcrowley/go-metrics v0.0.0-20180503174638-e2704e165165
 	github.com/sirupsen/logrus v1.1.0
 	github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d // indirect
@@ -27,4 +28,6 @@ require (
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/viper v1.2.0
 	github.com/ziutek/mymysql v1.5.4 // indirect
+	golang.org/x/net v0.0.0-20181207154023-610586996380 // indirect
+	gopkg.in/cenkalti/backoff.v1 v1.1.0 // indirect
 )

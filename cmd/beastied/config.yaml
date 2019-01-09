@@ -1,6 +1,14 @@
 lat: 40.135
 lon: 104.997
 
+#sources:
+#  adsb:
+#    host: 'labs.organicelement.com'
+#    port: 30005
+#  mlat:
+#    host: 'labs.organicelement.com'
+#    port: 30105
+
 sources:
   adsb:
     host: 'rpi3-1-wifi.home.custine.com'

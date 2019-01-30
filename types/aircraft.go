@@ -57,7 +57,6 @@ type AircraftData struct {
 	Mlat    bool
 	IsValid bool
 }
-//type AircraftMap map[uint32]*AircraftData
 
 func (a *AircraftData) MarshalJSON() ([]byte, error) {
 	type Alias AircraftData

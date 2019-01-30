@@ -80,13 +80,13 @@ func NewTableOutput(info *config.BeastInfo) *TableOutput {
 	return &TableOutput{Writer:writer,Beastinfo:info}
 }
 
-func (o TableOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
+func (o TableOutput) UpdateDisplay(knownAircraft []*types.AircraftData) {//*types.AircraftMap) {
 	displayTable.Body.Cells = [][]*simpletable.Cell{}
 	var b strings.Builder
 
-	sortedAircraft := make(AircraftList, 0, knownAircraft.Len())
+	sortedAircraft := make(AircraftList, 0, len(knownAircraft)) //.Len())
 
-	for _, aircraft := range knownAircraft.Copy() {
+	for _, aircraft := range knownAircraft { //.Copy() {
 		sortedAircraft = append(sortedAircraft, aircraft)
 	}
 
@@ -95,6 +95,10 @@ func (o TableOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
 	for i, aircraft := range sortedAircraft {
 		aircraftHasLocation := aircraft.Latitude != math.MaxFloat64 &&
 			aircraft.Longitude != math.MaxFloat64
+		// This hides ac with no pos from the display
+		if !aircraftHasLocation {
+			continue
+		}
 		aircraftHasAltitude := aircraft.Altitude != math.MaxInt32
 
 		var sLatLon string
@@ -110,6 +114,7 @@ func (o TableOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
 		} else {
 			sLatLon = "---.------,---.------"
 		}
+
 		if aircraftHasAltitude {
 			// TODO: This is noisy, need to figure out how to smooth and watch trending
 			var vrs string

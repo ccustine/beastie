@@ -67,7 +67,7 @@ func (c *TCPClient) start(ac chan types.AircraftData) {
 	}()
 }
 
-func openConnection(host string, port int) (conn net.Conn, err error){
+func openConnection(host string, port int) (conn net.Conn, err error) {
 	var tcpAddr *net.TCPAddr
 
 	if tcpAddr, err = net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", host, port)); err != nil {
@@ -102,7 +102,7 @@ func openConnection(host string, port int) (conn net.Conn, err error){
 
 func Start(beastInfo BeastInfo) {
 	Info = beastInfo
-	mcast := multicast.New()
+	aircraftmap := multicast.New()
 
 	sources := make(map[string]*TCPClient)
 	if beastInfo.Debug {
@@ -123,23 +123,29 @@ func Start(beastInfo BeastInfo) {
 	var outputs = make([]interface{}, len(beastInfo.Outputs))
 	for i, outtype := range beastInfo.Outputs {
 		switch outtype {
+		//case output.FANCYTABLE:
+		//	outputs[i] = output.NewFancyTableOutput(&beastInfo)
 		case output.TABLE:
 			outputs[i] = output.NewTableOutput(&beastInfo)
 		case output.LOG:
 			outputs[i] = output.NewLogOutput(&beastInfo)
 		case output.JSONAPI:
 			outputs[i] = output.NewJsonOutput()
+		case output.TILE38:
+			outputs[i] = output.NewTile38Output()
 		default:
 			outputs[i] = output.NewTableOutput(&beastInfo)
 		}
 		go func(op output.Output) {
-			l := mcast.Listen()
+			l := aircraftmap.Listen()
 			for {
 				acm := <-l.C
-				op.UpdateDisplay(acm.(*types.AircraftMap))
+				op.UpdateDisplay(acm.([]*types.AircraftData)) //.(*types.AircraftMap))
 			}
 		}(outputs[i].(output.Output))
 	}
+
+	var newacm []*types.AircraftData
 
 	go func() {
 		ticker := time.NewTicker(1000 * time.Millisecond)
@@ -154,10 +160,11 @@ func Start(beastInfo BeastInfo) {
 
 					if evict {
 						knownAircraft.Delete(aircraft.IcaoAddr)
-						continue
+						//continue
 					}
 				}
-				mcast.C <- knownAircraft
+				newacm = knownAircraft.Copy()
+				aircraftmap.C <- newacm
 			}
 		}
 	}()
@@ -185,7 +192,7 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) (err error) {
 
 	defer conn.Close()
 
-	for  {
+	for {
 		if ok := scanner.Scan(); !ok {
 			log.Errorf("Scanner has a problem...")
 			break

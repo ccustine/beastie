@@ -1,0 +1,10 @@
+<h2>My Aircraft</h2>
+<ul class="aircraft">
+  <li *ngFor="let ac of aircraft"
+      [class.selected]="ac === selectedAircraft"
+      (click)="onSelect(ac)">
+    <span class="badge">{{ac.call}}</span> {{ac.icao}}
+  </li>
+</ul>
+
+<app-aircraft-detail [aircraft]="selectedAircraft"></app-aircraft-detail>

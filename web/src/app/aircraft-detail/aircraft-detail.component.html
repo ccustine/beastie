@@ -1,0 +1,9 @@
+<div *ngIf="aircraft">
+  <h2>ICAO: {{aircraft.icao | lowercase}}</h2>
+  <div><span>Callsign: </span>{{aircraft.call}}</div>
+  <div>
+    <label>Squawk:
+      <input [(ngModel)]="aircraft.xpdr" placeholder="test">
+    </label>
+  </div>
+</div>

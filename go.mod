@@ -9,6 +9,8 @@ require (
 	github.com/cenkalti/backoff v2.1.0+incompatible
 	github.com/davecgh/go-spew v1.1.1
 	github.com/erikstmartin/go-testdb v0.0.0-20160219214506-8d10e4a1bae5 // indirect
+	github.com/gizak/termui v0.0.0-20190112035647-324d74473722
+	github.com/gomodule/redigo v2.0.0+incompatible
 	github.com/gopherjs/gopherjs v0.0.0-20181103185306-d547d1d9531e // indirect
 	github.com/gorilla/context v1.1.1 // indirect
 	github.com/gorilla/mux v1.6.2
@@ -19,8 +21,12 @@ require (
 	github.com/kylelemons/go-gypsy v0.0.0-20160905020020-08cad365cd28 // indirect
 	github.com/lib/pq v1.0.0 // indirect
 	github.com/mattn/go-isatty v0.0.4 // indirect
+	github.com/mattn/go-runewidth v0.0.4 // indirect
 	github.com/mitchellh/go-homedir v1.0.0
+	github.com/mitchellh/go-wordwrap v1.0.0 // indirect
+	github.com/nsf/termbox-go v0.0.0-20190104133558-0938b5187e61 // indirect
 	github.com/r3labs/sse v0.0.0-20181203121225-f81257c4e655
+	github.com/rakyll/statik v0.1.5
 	github.com/rcrowley/go-metrics v0.0.0-20180503174638-e2704e165165
 	github.com/sirupsen/logrus v1.1.0
 	github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d // indirect

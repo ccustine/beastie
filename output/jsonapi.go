@@ -20,11 +20,14 @@ import (
 	"github.com/ccustine/beastie/types"
 	"github.com/gorilla/mux"
 	"github.com/r3labs/sse"
+	"github.com/rakyll/statik/fs"
 	"github.com/rcrowley/go-metrics"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
+	_ "github.com/ccustine/beastie/statik"
 )
 
 const (
@@ -33,6 +36,7 @@ const (
 
 type JsonOutput struct {
 	aircraftList []*types.AircraftData
+	lock sync.RWMutex
 }
 
 var (
@@ -62,7 +66,13 @@ func NewJsonOutput() *JsonOutput {
 
 
 	// This will serve files under http://localhost:8000/static/<filename>
-	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("/tmp"))))
+	//r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("web/dist/"))))
+	statikFS, err := fs.New()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	r.PathPrefix("/static/").Handler(http.StripPrefix("/static", http.FileServer(statikFS)))
 
 	//r.HandleFunc("/airframes/{icao}", AirframeHandler).Name("article")
 
@@ -79,12 +89,12 @@ func NewJsonOutput() *JsonOutput {
 	return jsonApi
 }
 
-func (o JsonOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
+func (o JsonOutput) UpdateDisplay(knownAircraft []*types.AircraftData) {//*types.AircraftMap) {
 	//sortedAircraft := make(AircraftList, 0, aircraftList.Len())
 
-	lock.Lock()
-	aircraftList = knownAircraft.Copy()
-	lock.Unlock()
+	o.lock.Lock()
+	aircraftList = knownAircraft
+	o.lock.Unlock()
 
 	//TODO: Don't want to duplicate this everywhere
 	var b strings.Builder
@@ -95,8 +105,8 @@ func (o JsonOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
 	modesShortCnt      := metrics.GetOrRegisterCounter("Message Rate (ModeS Short)", metrics.DefaultRegistry)
 	modesLongCnt       := metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
 
-	b.WriteString(fmt.Sprintf("{\"now\": %d, \"good\":%.1f, \"bad\":%.1f, \"modea\":%d, \"modesshort\":%d, \"modeslong\":%d, \"aircraft\":[", time.Now().Unix(), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
-
+	b.WriteString(fmt.Sprintf(`{"now": %d, "good":%.1f, "bad":%.1f, "modea":%d, "modesshort":%d, "modeslong":%d, "aircraft":[`, time.Now().Unix(), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
+	o.lock.RLock()
 	for i, aircraft := range aircraftList {
 		acmb, _ := json.Marshal(aircraft)
 		b.Write(acmb)
@@ -104,6 +114,7 @@ func (o JsonOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
 			b.WriteString(",")
 		}
 	}
+	o.lock.RUnlock()
 
 	b.WriteString("]}")
 
@@ -113,12 +124,14 @@ func (o JsonOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
 }
 
 func (o JsonOutput) FeedHandler(w http.ResponseWriter, r *http.Request) {
-	lock.RLock()
+	enableCors(&w)
+	o.lock.RLock()
 	respondWithJSON(w, http.StatusOK, aircraftList)
-	lock.RUnlock()
+	o.lock.RUnlock()
 }
 
 func (o JsonOutput) MetricsHandler(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
 	var b strings.Builder
 
 	goodRate := metrics.GetOrRegisterMeter("Message Rate (Good)", metrics.DefaultRegistry)
@@ -127,14 +140,15 @@ func (o JsonOutput) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	modesShortCnt      := metrics.GetOrRegisterCounter("Message Rate (ModeS Short)", metrics.DefaultRegistry)
 	modesLongCnt       := metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
 
-	lock.RLock()
-	b.WriteString(fmt.Sprintf(`{\"now\": %d,
-\"good\":%.1f,
-\"bad\":%.1f,
-\"modea\":%d,
-\"modesshort\":%d,
-\"modeslong\":%d,`, time.Now().Unix(), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
-	lock.RUnlock()
+	o.lock.RLock()
+	b.WriteString(fmt.Sprintf(`{"now": %d,
+"good":%.1f,
+"bad":%.1f,
+"modea":%d,
+"modesshort":%d,
+"modeslong":%d,`, time.Now().Unix(), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
+	o.lock.RUnlock()
+	b.WriteString("]}")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -146,6 +160,7 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 }
 
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	enableCors(&w)
 	var b strings.Builder
 	acl := payload.([]*types.AircraftData)
 
@@ -155,14 +170,14 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	modesShortCnt := metrics.GetOrRegisterCounter("Message Rate (ModeS Short)", metrics.DefaultRegistry)
 	modesLongCnt := metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
 
-	b.WriteString(fmt.Sprintf(`{\"now\": %d,
-\"total\":%d,
-\"good\":%.1f,
-\"bad\":%.1f,
-\"modea\":%d,
-\"modesshort\":%d,
-\"modeslong\":%d,
-\"aircraft\":[`, time.Now().Unix(), len(acl), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
+	b.WriteString(fmt.Sprintf(`{"now": %d,
+"total":%d,
+"good":%.1f,
+"bad":%.1f,
+"modea":%d,
+"modesshort":%d,
+"modeslong":%d,
+"aircraft":[`, time.Now().Unix(), len(acl), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
 	for i, aircraft := range acl {
 		acmb, _ := json.Marshal(aircraft)
 		b.Write(acmb)
@@ -182,4 +197,8 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write([]byte(b.String()))
+}
+
+func enableCors(w *http.ResponseWriter) {
+	(*w).Header().Set("Access-Control-Allow-Origin", "*")
 }

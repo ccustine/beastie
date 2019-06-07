@@ -15,7 +15,7 @@
 package stream
 
 import (
-	"github.com/ccustine/beastie/modes"
+	"github.com/ccustine/beastie/app"
 	"github.com/spf13/cobra"
 )
 
@@ -37,6 +37,6 @@ to quickly create a Cobra application.`,
 func rootFunc(cmd *cobra.Command, args []string) {
 	// List Users
 	//cmd.Usage()
-	modes.Start(*info)
+	app.Start(info)
 
 }

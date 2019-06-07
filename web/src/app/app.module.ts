@@ -6,20 +6,35 @@ import { AircraftComponent } from './aircraft/aircraft.component';
 import { AircraftDetailComponent } from './aircraft-detail/aircraft-detail.component';
 import { MessagesComponent } from './messages/messages.component';
 import { HttpClientModule } from '@angular/common/http';
+// import { TableModule } from 'patternfly-ng';
+import { TableModule, NgxDataTableConfig, TableConfig, TableEvent } from 'patternfly-ng';
+// NGX Bootstrap
+import { BsDropdownConfig, BsDropdownModule } from 'ngx-bootstrap/dropdown';
+// NGX Datatable
+import { NgxDatatableModule } from '@swimlane/ngx-datatable';
+import { NavbarModule } from './navbar/navbar.module';
+import { MetricsComponent } from './metrics/metrics.component';
+import { InfoStatusCardModule, InfoStatusCardConfig } from 'patternfly-ng';
 
 @NgModule({
   declarations: [
     AppComponent,
     AircraftComponent,
     AircraftDetailComponent,
-    MessagesComponent
+    MessagesComponent,
+    MetricsComponent,
   ],
   imports: [
     BrowserModule,
     FormsModule,
-    HttpClientModule
+    HttpClientModule,
+    BsDropdownModule.forRoot(),
+    NgxDatatableModule,
+    TableModule,
+    NavbarModule,
+    InfoStatusCardModule,
   ],
-  providers: [],
+  providers: [BsDropdownConfig],
   bootstrap: [AppComponent]
 })
 export class AppModule { }

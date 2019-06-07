@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package main
 
 import (
@@ -21,6 +20,7 @@ import (
 	. "github.com/ccustine/beastie/config"
 	"github.com/ccustine/beastie/modes"
 	ver "github.com/ccustine/beastie/version"
+	geo "github.com/kellydunn/golang-geo"
 	"github.com/rcrowley/go-metrics"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -80,7 +80,7 @@ Read more at https://github.io/ccustine/config`,
 				os.Exit(1)
 			}()
 
-			app.Start(*beastInfo)
+			app.Start(beastInfo)
 
 		},
 		PersistentPreRun:  begin,
@@ -94,13 +94,14 @@ Read more at https://github.io/ccustine/config`,
 
 	// Must override default help flag to use -h for Host
 	rootCmd.PersistentFlags().BoolVarP(&helpFlag, "help", "", false, "Help default flag")
-	rootCmd.PersistentFlags().StringVar(&adsbSource.Host, BEAST_HOST, "", "Set the BEAST_HOST for the Everyware Cloud API endpoint")
-	rootCmd.PersistentFlags().IntVar(&adsbSource.Port, BEAST_PORT, 0, "Beast mode port to connect to")
-	rootCmd.PersistentFlags().StringVar(&mlatSource.Host, MLAT_HOST, "", "Set the BEAST_HOST for the Everyware Cloud API endpoint")
-	rootCmd.PersistentFlags().IntVar(&mlatSource.Port, MLAT_PORT, 0, "Beast mode port to connect to")
-	rootCmd.PersistentFlags().Float64VarP(&beastInfo.Latitude, BASELAT, "", 40.135, "Beast mode port to connect to")
-	rootCmd.PersistentFlags().Float64VarP(&beastInfo.Longitude, BASELON, "", -104.997, "Beast mode port to connect to")
-	rootCmd.PersistentFlags().StringSliceVarP(&beastInfo.Outputs, OUTPUT, "o", []string{"table"},"Set the BEAST_HOST for the Everyware Cloud API endpoint")
+	rootCmd.PersistentFlags().StringVar(&adsbSource.Host, BEAST_HOST, "", "Beast host (usually your piAware host or other host running dump1090)")
+	rootCmd.PersistentFlags().IntVar(&adsbSource.Port, BEAST_PORT, 0, "Beast port to connect to")
+	rootCmd.PersistentFlags().StringVar(&mlatSource.Host, MLAT_HOST, "", "MLAT host")
+	rootCmd.PersistentFlags().IntVar(&mlatSource.Port, MLAT_PORT, 0, "MLAT port to connect to")
+	rootCmd.PersistentFlags().Float64VarP(&beastInfo.Latitude, BASELAT, "", 40.135, "Latitude of ADSB Receiver antenna (not the beastie server)")
+	rootCmd.PersistentFlags().Float64VarP(&beastInfo.Longitude, BASELON, "", -104.997, "Longitude of ADSB Receiver antenna (not the beastie server)")
+	rootCmd.PersistentFlags().StringSliceVarP(&beastInfo.Outputs, OUTPUT, "o", []string{"table"}, "List of outputs, comma delimited")
+	rootCmd.PersistentFlags().BoolVarP(&beastInfo.RtlInput, "rtl", "r", false, "Use RTL SDR as receiver")
 
 	viper.BindPFlag("sources.adsb.host", rootCmd.PersistentFlags().Lookup(BEAST_HOST))
 	viper.BindPFlag("sources.adsb.port", rootCmd.PersistentFlags().Lookup(BEAST_PORT))
@@ -110,14 +111,13 @@ Read more at https://github.io/ccustine/config`,
 	viper.BindPFlag(BASELON, rootCmd.PersistentFlags().Lookup(BASELON))
 
 	// for Bash autocomplete
-	validSortFlags := []string{"distance", "last", "speed", "alt"}
-	rootCmd.PersistentFlags().SetAnnotation("sort", cobra.BashCompOneRequiredFlag, validSortFlags)
-
-	validOutputFlags := []string{"table", "file"}
-	rootCmd.PersistentFlags().SetAnnotation("out", cobra.BashCompOneRequiredFlag, validOutputFlags)
+	validOutputFlags := []string{"table", "jsonapi", "tile38", "log", "fancytable"}
+	rootCmd.PersistentFlags().SetAnnotation(OUTPUT, cobra.BashCompOneRequiredFlag, validOutputFlags)
 
 	log.SetOutput(os.Stdout)
 	cobra.OnInitialize(LoadConfig)
+
+	rootCmd.AddCommand(versionCmd)
 
 	return rootCmd
 }
@@ -171,6 +171,8 @@ func begin(cmd *cobra.Command, args []string) {
 		beastInfo.Metrics = metricflag
 	*/
 	beastInfo.Metrics = metricflag
+
+	beastInfo.Homepos = geo.NewPoint(beastInfo.Latitude, beastInfo.Longitude)
 
 }
 

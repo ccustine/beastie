@@ -1,10 +1,50 @@
 <h2>My Aircraft</h2>
+<!--
 <ul class="aircraft">
   <li *ngFor="let ac of aircraft"
       [class.selected]="ac === selectedAircraft"
       (click)="onSelect(ac)">
-    <span class="badge">{{ac.call}}</span> {{ac.icao}}
+    <span class="badge">{{ac.call}}</span><span>ICAO: {{ac.icao}}</span><span>Range: {{ac.rng}}</span><span>Heading: {{ac.hdg}}</span><span>Squawk: {{ac.xpdr}}</span><span>Speed: {{ac.spd}}</span>
   </li>
 </ul>
-
+-->
+<app-metrics [metrics]="metrics"></app-metrics>
 <app-aircraft-detail [aircraft]="selectedAircraft"></app-aircraft-detail>
+
+<div class="padding-15">
+  <div class="row">
+    <div class="col-sm-12">
+      <div class="form-group">
+        <pfng-table
+          [columns]="columns"
+          [config]="tableConfig"
+          [rows]="aircraft"
+          (select)="handleSelectionChange($event)"
+        >
+        </pfng-table>
+        <!-- Column templates -->
+        <ng-template #callTemplate let-row="row">
+          <span>{{row.call}}</span>
+        </ng-template>
+        <ng-template #icaoTemplate let-row="row">
+          <span>{{row.icao}}</span>
+        </ng-template>
+        <ng-template #rngTemplate let-row="row">
+          <span>{{row.rng}}</span>
+        </ng-template>
+        <ng-template #hdgTemplate let-row="row">
+          <span>{{row.hdg}}</span>
+        </ng-template>
+        <ng-template #altTemplate let-row="row">
+          <span>{{row.alt}}</span>
+        </ng-template>
+        <ng-template #xpdrTemplate let-row="row">
+          <span>{{row.xpdr}}</span>
+        </ng-template>
+        <ng-template #spdTemplate let-row="row">
+          <span>{{row.spd}}</span>
+        </ng-template>
+      </div>
+    </div>
+  </div>
+</div>

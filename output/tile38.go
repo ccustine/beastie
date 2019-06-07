@@ -19,7 +19,9 @@ import (
 	"github.com/ccustine/beastie/types"
 	"github.com/gomodule/redigo/redis"
 	"github.com/sirupsen/logrus"
+	"math"
 	"sync"
+	"time"
 )
 
 const (
@@ -33,7 +35,7 @@ type Tile38Output struct {
 }
 
 func NewTile38Output() *Tile38Output {
-	rc, err := redis.Dial("tcp", "127.0.0.1:9851")
+	rc, err := redis.Dial("tcp", "127.0.0.1:9851", redis.DialReadTimeout(1 * time.Second), redis.DialWriteTimeout(1 * time.Second))
 	if err != nil {
 		logrus.Warnf("error: tile38 - ", err)
 		return nil
@@ -46,20 +48,72 @@ func NewTile38Output() *Tile38Output {
 	return tile38Output
 }
 
-func (o Tile38Output) UpdateDisplay(knownAircraft []*types.AircraftData) { //*types.AircraftMap) {
+func (o *Tile38Output) UpdateDisplay(knownAircraft []*types.AircraftData) { //*types.AircraftMap) {
+	//logrus.Warn("Step 1")
+
+	connErr := o.rc.Err()
+	if connErr != nil {
+		logrus.Errorf("Tile38 connection error: %s", connErr.Error())
+		err := o.rc.Close()
+		if err != nil {
+			logrus.Warnf("error on Close: tile38 - ", err)
+			return
+		}
+
+
+		rc, err := redis.Dial("tcp", "127.0.0.1:9851", redis.DialReadTimeout(1 * time.Second), redis.DialWriteTimeout(1 * time.Second))
+		if err != nil {
+			logrus.Warnf("error on Dial: tile38 - ", err)
+			return
+		}
+		o.rc = rc
+	}
+
+	//logrus.Warn("Step 1a")
+
 	//sortedAircraft := make(AircraftList, 0, aircraftList.Len())
+	//aircraftList := make([]AircraftData, 0, len(knownAircraft)) //.Len())
+
+	//for _, aircraft := range knownAircraft { //.Copy() {
+	//	aircraftList = append(aircraftList, *aircraft)
+	//}
 
 	//o.lock.Lock()
 	o.aircraftList = knownAircraft //.Copy()
 	//o.lock.Unlock()
 
-	for _, aircraft := range o.aircraftList {
+	//logrus.Warn("Step 2")
+
+	connErr = o.rc.Err()
+	if connErr != nil {
+		logrus.Errorf("Tile38 connection error: %s", connErr.Error())
+		return
+	}
+
+	//logrus.Warn("Step 3")
+
+	process := false
+	//o.lock.RLock()
+	for i, aircraft := range o.aircraftList {
+		logrus.Warnf("Processing AC %d", i)
+
+		aircraftHasLocation := aircraft.Latitude != math.MaxFloat64 &&
+			aircraft.Longitude != math.MaxFloat64
+		// This hides ac with no pos from the display
+		if !aircraftHasLocation {
+			continue
+		}
+
+		process = true
+		//logrus.Warnf("Processing AC %d, has pos", i)
+
 		err := o.rc.Send("SET", "aircraft", fmt.Sprintf("%06x", aircraft.IcaoAddr),
 			"EX", 59,
 			"FIELD", "spd", aircraft.Speed,
 			"FIELD", "hdg", aircraft.Heading,
 			"POINT", aircraft.Latitude, aircraft.Longitude, aircraft.Altitude,
 		)
+		//logrus.Warn("Step 3a")
 		if err != nil {
 			logrus.Warnf("error: tile38 Set CMD - ", err)
 		}
@@ -72,17 +126,31 @@ func (o Tile38Output) UpdateDisplay(knownAircraft []*types.AircraftData) { //*ty
 				}
 		*/
 	}
+	//o.lock.RUnlock()
+
+	//logrus.Warn("Step 3b (Should happen once)")
+
+	// All of the Redis API calls below only need to happen if we actually sent anything above
+	if !process {
+		return
+	}
+
+	//logrus.Warn("Step 4")
 
 	err := o.rc.Flush()
+	//logrus.Warn("Step 4a")
 	if err != nil {
-		logrus.Warnf("error: tile38 Set CMD(Call) - ", err)
+		logrus.Warnf("error: tile38 flush on Set CMD(Call) - ", err)
 	}
 
-	reply, err := o.rc.Receive()
+	//logrus.Warn("Step 5")
+
+	reply, err := redis.String(o.rc.Receive())
 	if err != nil {
-		logrus.Warnf("error: tile38 Set CMD(Call) - ", err)
-		logrus.Warnf("error: tile38 Resp - ", reply)
+		logrus.Errorf("Err: %s Reply: %s", err, reply)
 	}
+
+	//logrus.Warn("Step 6")
 
 	//logrus.Infof("RESP Reply %s", reply)
 }

@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"fmt"
+	"github.com/ccustine/beastie/cmd/registrycmd"
 	"github.com/ccustine/beastie/config"
 	"os"
 
 	"github.com/ccustine/beastie/cmd/stream"
-	"github.com/ccustine/beastie/modes"
-	ver "github.com/ccustine/beastie/version"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -35,7 +33,7 @@ var (
 	port      int
 	baseLat   float64
 	baseLon   float64
-	beastInfo = config.BeastInfo{}
+	beastInfo = &config.BeastInfo{}
 )
 
 var cfg = viper.New()
@@ -47,7 +45,7 @@ func Execute() {
 
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:   "config",
+		Use:   "beastie-cli",
 		Short: "Command utilities for Kapua",
 		Long: `config is the interactive command line
 
@@ -56,14 +54,13 @@ config is the interactive command line for displaying ADS-B data from a Beast / 
 More info at https://github.io/ccustine/config`,
 		Run: func(cmd *cobra.Command, args []string) {
 			//cmd.Usage()
-
 		},
 		PersistentPreRun: begin,
 	}
 
 	// Persistent == available to sub commands
-	rootCmd.PersistentFlags().BoolVarP(&debug, DEBUG, "d", false, "Outputs debug level logging.")
-	rootCmd.PersistentFlags().BoolVarP(&metrics, METRICS, "m", false, "Outputs Metrics")
+	//rootCmd.PersistentFlags().BoolVarP(&debug, DEBUG, "d", false, "Outputs debug level logging.")
+	//rootCmd.PersistentFlags().BoolVarP(&metrics, METRICS, "m", false, "Outputs Metrics")
 	rootCmd.PersistentFlags().StringVar(&cfgFile, CONFIGFILE, "", "cfg file (default is $HOME/.kapgun.yaml)")
 
 	// Must override default help flag to use -h for Host
@@ -83,23 +80,16 @@ More info at https://github.io/ccustine/config`,
 	rootCmd.PersistentFlags().SetAnnotation("sort", cobra.BashCompOneRequiredFlag, validSortFlags)
 
 	rootCmd.AddCommand(stream.NewRootCmd(beastInfo))
-	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(registrycmd.NewImportCmd(beastInfo))
+	rootCmd.AddCommand(registrycmd.NewDownloadCmd(beastInfo))
+	rootCmd.AddCommand(registrycmd.NewListCmd(beastInfo))
+	rootCmd.AddCommand(registrycmd.NewFindCmd(beastInfo))
+	rootCmd.AddCommand(NewVersionCmd())
 
 	log.SetOutput(os.Stdout)
 	cobra.OnInitialize(config.LoadConfig)
 
 	return rootCmd
-}
-
-var versionCmd = &cobra.Command{
-	Use:   "version",
-	Short: "Print the version number",
-	Long:  `Shows the version number if a final release, or a date for snapshots`,
-	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("The version is: ", VERSION)
-		ver.PrintVersion()
-
-	},
 }
 
 func begin(cmd *cobra.Command, args []string) {

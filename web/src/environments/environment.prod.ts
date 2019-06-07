@@ -1,3 +1,5 @@
 export const environment = {
-  production: true
+  production: true,
+  aircraftUrl:'/aircraft',
+  streamUrl:'/stream?stream=aircraft',
 };

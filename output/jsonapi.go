@@ -24,6 +24,7 @@ import (
 	"github.com/rakyll/statik/fs"
 	"github.com/rcrowley/go-metrics"
 	"log"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
@@ -41,7 +42,7 @@ type JsonOutput struct {
 
 var (
 	aircraftList []*types.AircraftData
-	lock         sync.RWMutex
+	//lock         sync.RWMutex
 	server       *sse.Server
 )
 
@@ -104,14 +105,25 @@ func (o JsonOutput) UpdateDisplay(knownAircraft []*types.AircraftData) { //*type
 	modesShortCnt := metrics.GetOrRegisterCounter("Message Rate (ModeS Short)", metrics.DefaultRegistry)
 	modesLongCnt := metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
 
-	b.WriteString(fmt.Sprintf(`{"now": %d, "good":%.1f, "bad":%.1f, "modea":%d, "modesshort":%d, "modeslong":%d, "aircraft":[`, time.Now().Unix(), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
+	b.WriteString(fmt.Sprintf(`{"metrics":{"now":%d,"total":%d,"good":%.1f,"bad":%.1f,"modea":%d,"modesshort":%d,"modeslong":%d},"aircraft":[`, time.Now().Unix(), len(aircraftList), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
 	o.lock.RLock()
+
+	writeComma := false
 	for i, aircraft := range aircraftList {
-		acmb, _ := json.Marshal(aircraft)
-		b.Write(acmb)
-		if i <= len(aircraftList)-2 {
+		aircraftHasLocation := aircraft.Latitude != math.MaxFloat64 &&
+			aircraft.Longitude != math.MaxFloat64
+		// This hides ac with no pos from the display
+		if !aircraftHasLocation {
+			continue
+		}
+
+		if i < len(aircraftList) && writeComma {
 			b.WriteString(",")
 		}
+
+		acmb, _ := json.Marshal(aircraft)
+		b.Write(acmb)
+		writeComma = true
 	}
 	o.lock.RUnlock()
 
@@ -140,14 +152,14 @@ func (o JsonOutput) MetricsHandler(w http.ResponseWriter, r *http.Request) {
 	modesLongCnt := metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
 
 	o.lock.RLock()
-	b.WriteString(fmt.Sprintf(`{"now": %d,
+	b.WriteString(fmt.Sprintf(`{"metrics":{"now": %d,
 "good":%.1f,
 "bad":%.1f,
 "modea":%d,
 "modesshort":%d,
-"modeslong":%d,`, time.Now().Unix(), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
+"modeslong":%d`, time.Now().Unix(), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
 	o.lock.RUnlock()
-	b.WriteString("]}")
+	b.WriteString("}}")
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -169,13 +181,13 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 	modesShortCnt := metrics.GetOrRegisterCounter("Message Rate (ModeS Short)", metrics.DefaultRegistry)
 	modesLongCnt := metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
 
-	b.WriteString(fmt.Sprintf(`{"now": %d,
+	b.WriteString(fmt.Sprintf(`{"metrics":{"now": %d,
 "total":%d,
 "good":%.1f,
 "bad":%.1f,
 "modea":%d,
 "modesshort":%d,
-"modeslong":%d,
+"modeslong":%d},
 "aircraft":[`, time.Now().Unix(), len(acl), goodRate.Rate1(), badRate.Rate1(), modeACCnt.Count(), modesShortCnt.Count(), modesLongCnt.Count()))
 	for i, aircraft := range acl {
 		acmb, _ := json.Marshal(aircraft)

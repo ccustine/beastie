@@ -37,6 +37,9 @@ type AircraftData struct {
 	Longitude float64
 	Altitude  int32
 	AltUnit   uint
+	Surface   bool
+	Country   string
+	Military  bool
 
 	//ewd            uint  // 0 = East, 1 = West.
 	//ewv            int32 // E/W velocity.
@@ -56,6 +59,7 @@ type AircraftData struct {
 
 	Mlat    bool
 	IsValid bool
+	Range   float64
 }
 
 func (a *AircraftData) MarshalJSON() ([]byte, error) {
@@ -86,18 +90,22 @@ func (a *AircraftData) MarshalJSON() ([]byte, error) {
 	}
 
 	return json.Marshal(&struct {
-		IcaoAddr     string `json:"icao"`
-		Squawk       string `json:"xpdr,omitempty"`
-		VertRate     string `json:"vrt,omitempty"`
-		Latitude     string `json:"lat,omitempty"`
-		Longitude    string `json:"lon,omitempty"`
-		MLat         bool   `json:"mlat,omitempty"`
-		Altitude     int32  `json:"alt,omitempty"`
-		VertRateSign uint   `json:"vrtsgn,omitempty"`
-		Speed        int32  `json:"spd,omitempty"`
-		Heading      int32  `json:"hdg,omitempty"`
-		Distance      int32  `json:"rng,omitempty"`
-		Callsign      string  `json:"call,omitempty"`
+		IcaoAddr  string `json:"icao"`
+		Squawk    string `json:"xpdr,omitempty"`
+		VertRate  string `json:"vrt,omitempty"`
+		Latitude  string `json:"lat,omitempty"`
+		Longitude string `json:"lon,omitempty"`
+		MLat      bool   `json:"mlat,omitempty"`
+		Altitude  int32  `json:"alt,omitempty"`
+		Surface   bool   `json:"srfc,omitempty"`
+		Country   string `json:"country,omitempty"`
+		Military  bool   `json:"mil,omitempty"`
+
+		VertRateSign uint    `json:"vrtsgn,omitempty"`
+		Speed        int32   `json:"spd,omitempty"`
+		Heading      int32   `json:"hdg,omitempty"`
+		Range        float64 `json:"rng,omitempty"`
+		Callsign     string  `json:"call,omitempty"`
 		//*Alias
 	}{
 		IcaoAddr:     fmt.Sprintf("%06x", a.IcaoAddr),
@@ -107,10 +115,14 @@ func (a *AircraftData) MarshalJSON() ([]byte, error) {
 		Longitude:    sLong,
 		MLat:         a.Mlat,
 		Altitude:     a.Altitude,
+		Surface:      a.Surface,
+		Country:      a.Country,
+		Military:     a.Military,
 		VertRateSign: a.VertRateSign,
 		Speed:        a.Speed,
 		Heading:      a.Heading,
-		Callsign:      a.Callsign,
+		Range:        a.Range,
+		Callsign:     a.Callsign,
 		//Alias:    (*Alias)(a),
 	})
 }

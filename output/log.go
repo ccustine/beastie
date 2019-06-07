@@ -52,12 +52,12 @@ func NewLogOutput(info *config.BeastInfo) *LogOutput {
 	return &LogOutput{Beastinfo:info, Aclog:aclog, ACLogFile:file}
 }
 
-func (o LogOutput) UpdateDisplay(knownAircraft *types.AircraftMap) {
+func (o LogOutput) UpdateDisplay(knownAircraft []*types.AircraftData) {
 	//var b strings.Builder
 
-	sortedAircraft := make(AircraftList, 0, knownAircraft.Len())
+	sortedAircraft := make(AircraftList, 0, len(knownAircraft))
 
-	for _, aircraft := range knownAircraft.Copy() {
+	for _, aircraft := range knownAircraft { //.Copy() {
 		sortedAircraft = append(sortedAircraft, aircraft)
 	}
 

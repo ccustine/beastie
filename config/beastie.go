@@ -16,6 +16,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/kellydunn/golang-geo"
 	"github.com/mitchellh/go-homedir"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -28,11 +29,13 @@ var (
 
 type BeastInfo struct {
 	Sources   []Source
+	Homepos   *geo.Point
 	Latitude  float64  `yaml:"baseLat"`
 	Longitude float64  `yaml:"baseLon"`
 	Debug     bool     `yaml:"debug"`
 	Metrics   bool     `yaml:"metrics"`
 	Outputs   []string `yaml:"output"`
+	RtlInput  bool     `yaml:"rtl"`
 }
 
 type Source struct {
@@ -67,7 +70,7 @@ func LoadConfig() {
 	} else {
 		viper.SetConfigName("config")
 		viper.AddConfigPath(".")
-		viper.AddConfigPath(home + "/.config")
+		viper.AddConfigPath(home + "/.beastie")
 	}
 
 	if err := viper.ReadInConfig(); err != nil {

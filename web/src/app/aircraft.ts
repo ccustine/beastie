@@ -3,13 +3,7 @@ export class EventSourceResponse {
 }
 
 export class AircraftResponse {
-  now: number;
-  total:number;
-  good:number;
-  bad:number;
-  modea:number;
-  modesshort:number;
-  modeslong:number;
+  metrics: Metrics;
   aircraft: Aircraft[];
 
   constructor(data: any) {
@@ -42,6 +36,7 @@ export class Aircraft {
 //  VertRate       int32 // Vertical rate.
   spd: number;         // int32
   hdg: number;       // int32
+  rng: number;       // int32
 //  HeadingIsValid bool
 
 //  LastPing time.Time
@@ -52,5 +47,15 @@ export class Aircraft {
 //  Mlat    bool
 //  IsValid bool
 
+}
+
+export class Metrics {
+  now: number;
+  total: number;
+  good: number;
+  bad: number;
+  modea: number;
+  modesshort: number;
+  modeslong: number;
 }
 

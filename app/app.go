@@ -21,35 +21,50 @@ import (
 	"fmt"
 	"github.com/SierraSoftworks/multicast"
 	. "github.com/ccustine/beastie/config"
+	"github.com/ccustine/beastie/input"
 	"github.com/ccustine/beastie/modes"
 	"github.com/ccustine/beastie/output"
 	"github.com/ccustine/beastie/types"
 	"github.com/cenkalti/backoff"
+	"github.com/google/gops/agent"
 	"github.com/rcrowley/go-metrics"
 	log "github.com/sirupsen/logrus"
 	"math"
 	"net"
+	"sync"
 	"time"
 )
 
 var (
 	magicTimestampMLAT = []byte{0xFF, 0x00, 0x4D, 0x4C, 0x41, 0x54}
-	Info               BeastInfo
+	Info               *BeastInfo
 	knownAircraft      = types.NewAircraftMap()
-	aircraft           = make(chan types.AircraftData) //, 10)
+	aircraft           = make(chan types.AircraftData, 20) //, 10) This should be investigated, might be better off unbuffered
 	GoodRate           = metrics.GetOrRegisterMeter("Message Rate (Good)", metrics.DefaultRegistry)
 	BadRate            = metrics.GetOrRegisterMeter("Message Rate (Bad)", metrics.DefaultRegistry)
 	ModeACCnt          = metrics.GetOrRegisterCounter("Message Rate (ModeA/C)", metrics.DefaultRegistry)
 	ModesShortCnt      = metrics.GetOrRegisterCounter("Message Rate (ModeS Short)", metrics.DefaultRegistry)
 	ModesLongCnt       = metrics.GetOrRegisterCounter("Message Rate (ModeS Long)", metrics.DefaultRegistry)
+	//RtlGoodRate        = metrics.GetOrRegisterMeter("Message Rate (RTL Good)", metrics.DefaultRegistry)
+	//RtlBadRate         = metrics.GetOrRegisterMeter("Message Rate (RTL Bad)", metrics.DefaultRegistry)
+	//done               = make(chan bool)
+	dataBuffLen = 16 * 16384
+	group       = &sync.WaitGroup{}
 )
+
+type Scanner interface {
+	Start() error
+	Close()
+	GetSourceIQCh() <-chan *input.SourceIQ
+	Error() error
+}
 
 type TCPClient struct {
 	Host string
 	Port int
 }
 
-func (c *TCPClient) start(ac chan types.AircraftData) {
+func (c *TCPClient) start(ac chan<- types.AircraftData) {
 	go func() {
 		_ = backoff.Retry(func() (error) {
 			var conn net.Conn
@@ -62,7 +77,7 @@ func (c *TCPClient) start(ac chan types.AircraftData) {
 			handlerErr := handleConnection(conn, ac)
 			return handlerErr
 		},
-		backoff.NewConstantBackOff(1 * time.Second))
+			backoff.NewConstantBackOff(1*time.Second))
 		fmt.Println("Error in retry")
 	}()
 }
@@ -82,7 +97,7 @@ func openConnection(host string, port int) (conn net.Conn, err error) {
 		}
 		return nil
 	},
-	backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 5))
+		backoff.WithMaxRetries(backoff.NewExponentialBackOff(), 5))
 
 	if err != nil {
 		log.Errorf("Retry failed: %s", err)
@@ -100,9 +115,14 @@ func openConnection(host string, port int) (conn net.Conn, err error) {
 	return conn, nil
 }
 
-func Start(beastInfo BeastInfo) {
+func Start(beastInfo *BeastInfo) {
+	if err := agent.Listen(agent.Options{}); err != nil {
+		log.Fatal(err)
+	}
+
 	Info = beastInfo
 	aircraftmap := multicast.New()
+	done := multicast.New()
 
 	sources := make(map[string]*TCPClient)
 	if beastInfo.Debug {
@@ -120,35 +140,39 @@ func Start(beastInfo BeastInfo) {
 		}
 	}
 
-	var outputs = make([]interface{}, len(beastInfo.Outputs))
+	outputs := make([]output.Output, len(beastInfo.Outputs))
 	for i, outtype := range beastInfo.Outputs {
 		switch outtype {
-		//case output.FANCYTABLE:
-		//	outputs[i] = output.NewFancyTableOutput(&beastInfo)
-		case output.TABLE:
-			outputs[i] = output.NewTableOutput(&beastInfo)
+		case output.FANCYTABLE:
+			outputs[i] = output.NewFancyTableOutput(beastInfo, group, done.C)
+			//go outputs[i].(*output.FancyTable).pollUi()
 		case output.LOG:
-			outputs[i] = output.NewLogOutput(&beastInfo)
+			outputs[i] = output.NewLogOutput(beastInfo)
 		case output.JSONAPI:
 			outputs[i] = output.NewJsonOutput()
 		case output.TILE38:
 			outputs[i] = output.NewTile38Output()
 		default:
-			outputs[i] = output.NewTableOutput(&beastInfo)
+			outputs[i] = output.NewFancyTableOutput(beastInfo, group, done.C)
+			//go outputs[i].(*output.FancyTable).pollUi()
 		}
+		l := aircraftmap.Listen()
 		go func(op output.Output) {
-			l := aircraftmap.Listen()
 			for {
-				acm := <-l.C
-				op.UpdateDisplay(acm.([]*types.AircraftData)) //.(*types.AircraftMap))
+				select {
+				case acm := <-l.C:
+					op.UpdateDisplay(acm.([]*types.AircraftData)) //.(*types.AircraftMap))
+				case <-done.Listen().C:
+					return //Unnecessary?
+				}
 			}
-		}(outputs[i].(output.Output))
+		}(outputs[i])
 	}
 
 	var newacm []*types.AircraftData
 
 	go func() {
-		ticker := time.NewTicker(1000 * time.Millisecond)
+		ticker := time.NewTicker(1000 * time.Millisecond) //TODO: Make this adjustable and separate tickers per output
 		for {
 			select {
 			case <-ticker.C:
@@ -167,24 +191,78 @@ func Start(beastInfo BeastInfo) {
 				aircraftmap.C <- newacm
 			}
 		}
+
 	}()
 
+	// RTL SDR Scanner
+	var scanner Scanner
+
+	if Info.RtlInput {
+
+		scanner = input.NewRtlSdrScanner(dataBuffLen)
+		//defer scanner.Close()
+
+		demod := input.NewDemod()
+		//var msgChs = make([]chan input.Message, 0)
+
+		go func() {
+			ch := scanner.GetSourceIQCh()
+
+			for {
+				select {
+				case iq := <-ch:
+					go demod.DetectModeS(iq)
+				case <-done.Listen().C:
+					demod.Close()
+					scanner.Close()
+					return
+				}
+			}
+		}()
+
+		time.Sleep(2 * time.Millisecond)
+
+		go func() {
+			for {
+				select {
+				case msg := <-demod.MessageCh:
+					aircraft <- modes.DecodeModeS(msg.Msg, false, 0.0, knownAircraft, Info)
+				case <-done.Listen().C:
+					return
+
+				}
+			}
+		}()
+
+		err := scanner.Start()
+		if err != nil {
+			log.Println("Scanner err: " + err.Error())
+		}
+
+	}
+
 	// TODO: Add stream outputs to send real time messages directly to consumers
-	// TODO: ie, stream to a DB consumer that stores ALL data and updates to a DB
+	// TODO: ie, stream to a DB consumer that stores ALL position data to a DB
+	loop:
 	for {
 		select {
 		case airframe := <-aircraft:
+			log.Debugf("Received %x which is %t", airframe.IcaoAddr, airframe.IsValid)
 			if !airframe.IsValid {
 				continue
 			}
 			knownAircraft.Store(airframe.IcaoAddr, &airframe)
 			//TODO: mcast or something similar to stream consumers?
+		case <-done.Listen().C:
+			break loop
 		}
 	}
 
+	group.Wait()
+
 }
 
-func handleConnection(conn net.Conn, ac chan types.AircraftData) (err error) {
+func handleConnection(conn net.Conn, ac chan<- types.AircraftData) (err error) {
 	//reader := bufio.NewReaderSize(conn, 128)
 	reader := bufio.NewReader(conn)
 	scanner := bufio.NewScanner(reader)
@@ -250,9 +328,9 @@ func handleConnection(conn net.Conn, ac chan types.AircraftData) (err error) {
 		isMlat := bytes.Equal(currentMessage[1:7], magicTimestampMLAT)
 
 		if msgType == 0x31 {
-			ac <- modes.DecodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, &Info)
+			ac <- modes.DecodeModeAC(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, Info)
 		} else {
-			ac <- modes.DecodeModeS(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, &Info)
+			ac <- modes.DecodeModeS(currentMessage[8:], isMlat, 10*math.Log10(math.Pow(float64(currentMessage[7])/255, 2)), knownAircraft, Info)
 		}
 	}
 
